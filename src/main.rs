@@ -1,5 +1,7 @@
-const INIT_TAPE_SIZE: usize = 8192;
+const INIT_TAPE_SIZE: usize = 65536;
+const INIT_POINTER_LOC: usize = INIT_TAPE_SIZE / 2;
 
+#[derive(Debug)]
 enum Command {
     IncPointer,
     DecPointer,
@@ -11,7 +13,7 @@ enum Command {
     JumpBack { idx: usize },
 }
 
-fn parse(src: String) {
+fn parse(src: String) -> Vec<Command> {
     let mut commands: Vec<Command> = vec![];
     let mut stack: Vec<usize> = vec![];
     let mut idx = 0;
@@ -25,35 +27,76 @@ fn parse(src: String) {
             ',' => Some(Command::Input),
             '[' => {
                 stack.push(idx);
+                // idx will be changed when the matching ']' is encountered
                 Some(Command::JumpForward { idx: 0 })
             },
             ']' => {
-                let prevIdx = match stack.pop() {
+                let prev_idx = match stack.pop() {
                     Some(value) => value,
                     None => {
                         eprintln!("Error parsing input: Unmatched ']'");
                         std::process::exit(1);
                     }
                 };
-                if let Command::JumpForward { idx: forwardIdx } = &mut commands[prevIdx] {
-                    *forwardIdx = idx;
+                // The command at prev_idx should always be JumpForward
+                if let Command::JumpForward { idx: forward_idx } = &mut commands[prev_idx] {
+                    *forward_idx = idx;
                 } else {
                     eprintln!("Error parsing input: Unexpected character");
                     std::process::exit(1);
                 }
-                Some(Command::JumpBack { idx: prevIdx })
+                Some(Command::JumpBack { idx: prev_idx })
             },
             _ => None,
         };
 
-        idx += 1;
+        if let Some(op) = op {
+            commands.push(op);
+            idx += 1;
+        }
     }
+
+    if stack.len() > 0 {
+        eprintln!("Error parsing input: Unmatched '['");
+        std::process::exit(1);
+    }
+
+    commands
 }
 
-//fn interp(src: &str) {
-//    let mut tape: Vec<u8> = vec![0; INIT_TAPE_SIZE];
-//    let mut pointer = 0;
-//}
+fn interp(commands: Vec<Command>) {
+    let mut tape: Vec<u8> = vec![0; INIT_TAPE_SIZE];
+    let mut pointer = INIT_POINTER_LOC;
+
+    let mut pc = 0;
+
+    while pc < commands.len() {
+        match commands[pc] {
+            Command::IncPointer => pointer += 1,
+            Command::DecPointer => pointer -= 1,
+            Command::IncData => tape[pointer] = tape[pointer].wrapping_add(1),
+            Command::DecData => tape[pointer] = tape[pointer].wrapping_sub(1),
+            Command::Output => {
+                match char::from_u32(u32::from(tape[pointer])) {
+                    Some(c) => print!("{}", c),
+                    None => {},
+                }
+            }
+            Command::Input => {
+                use std::io::Read;
+
+                let mut input_buf: [u8; 1] = [0; 1];
+                std::io::stdin().read_exact(&mut input_buf).expect("Failed to read input");
+                tape[pointer] = input_buf[0];
+            },
+            Command::JumpForward { idx} => if tape[pointer] == 0 { pc = idx },
+            Command::JumpBack { idx } => if tape[pointer] != 0 { pc = idx },
+        }
+        pc += 1;
+    }
+
+    println!("\nExited normally\n");
+}
 
 fn main() {
     // Get args
@@ -77,5 +120,6 @@ fn main() {
         }
     };
 
-    parse(contents);
+    let commands = parse(contents);
+    interp(commands);
 }
