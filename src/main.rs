@@ -1,6 +1,9 @@
-mod parser;
+pub mod parser;
+pub mod opt;
+
 use parser::parse;
 use parser::Command;
+use opt::optimize;
 
 const INIT_TAPE_SIZE: usize = 65536;
 const INIT_POINTER_LOC: usize = INIT_TAPE_SIZE / 2;
@@ -63,5 +66,6 @@ fn main() {
     };
 
     let commands = parse(contents);
-    interp(commands);
+    let opt_commands = optimize(commands);
+    interp(opt_commands);
 }
