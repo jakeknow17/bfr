@@ -1,6 +1,37 @@
 const INIT_TAPE_SIZE: usize = 65536;
 const INIT_POINTER_LOC: usize = INIT_TAPE_SIZE / 2;
 
+struct Args {
+    filename: String,
+    enable_profiler: bool,
+}
+
+fn parse_args() -> Args {
+    let mut tmp_filename = None;
+    let mut args_struct = Args {
+        filename: "".to_string(),
+        enable_profiler: false,
+    };
+    for arg in std::env::args().skip(1) {
+        if arg == "-p" {
+            args_struct.enable_profiler = true;
+        } else {
+            tmp_filename = Some(arg);
+        }
+    }
+
+    // Requires filename
+    match tmp_filename {
+        Some(val) => args_struct.filename = val,
+        None => {
+            eprintln!("Usage: bfr <filename> [-p]");
+            std::process::exit(1);
+        }
+    }
+    
+    args_struct
+}
+
 #[derive(Debug)]
 enum Command {
     IncPointer,
@@ -99,23 +130,14 @@ fn interp(commands: Vec<Command>) {
 }
 
 fn main() {
-    // Get args
-    let args: Vec<String> = std::env::args().collect();
 
-    // Require at least 2 args
-    if args.len() < 2 {
-        eprintln!("Usage: {} <filename>", args[0]);
-        std::process::exit(1);
-    }
-
-     // Get the filename from args[1]
-    let filename = &args[1];
+    let args = parse_args();
 
     // Read the file contents
-    let contents = match std::fs::read_to_string(filename) {
+    let contents = match std::fs::read_to_string(&args.filename) {
         Ok(contents) => contents,
         Err(e) => {
-            eprintln!("Error reading file {}: {}", filename, e);
+            eprintln!("Error reading file {}: {}", args.filename, e);
             std::process::exit(1);
         }
     };
