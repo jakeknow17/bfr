@@ -34,14 +34,14 @@ fn parse_args() -> Args {
 
 #[derive(Debug)]
 enum Command {
-    IncPointer,
-    DecPointer,
-    IncData,
-    DecData,
-    Output,
-    Input,
-    JumpForward { idx: usize },
-    JumpBack { idx: usize },
+    IncPointer { count: usize },
+    DecPointer { count: usize },
+    IncData { count: usize },
+    DecData { count: usize },
+    Output { count: usize },
+    Input { count: usize },
+    JumpForward { idx: usize, count: usize },
+    JumpBack { idx: usize, count: usize },
 }
 
 fn parse(src: String) -> Vec<Command> {
@@ -50,16 +50,16 @@ fn parse(src: String) -> Vec<Command> {
     let mut idx = 0;
     for c in src.chars() {
         let op = match c {
-            '>' => Some(Command::IncPointer),
-            '<' => Some(Command::DecPointer),
-            '+' => Some(Command::IncData),
-            '-' => Some(Command::DecData),
-            '.' => Some(Command::Output),
-            ',' => Some(Command::Input),
+            '>' => Some(Command::IncPointer { count: 0}),
+            '<' => Some(Command::DecPointer { count: 0}),
+            '+' => Some(Command::IncData { count: 0}),
+            '-' => Some(Command::DecData { count: 0}),
+            '.' => Some(Command::Output { count: 0}),
+            ',' => Some(Command::Input { count: 0}),
             '[' => {
                 stack.push(idx);
                 // idx will be changed when the matching ']' is encountered
-                Some(Command::JumpForward { idx: 0 })
+                Some(Command::JumpForward { idx: 0, count: 0 })
             },
             ']' => {
                 let prev_idx = match stack.pop() {
@@ -70,13 +70,13 @@ fn parse(src: String) -> Vec<Command> {
                     }
                 };
                 // The command at prev_idx should always be JumpForward
-                if let Command::JumpForward { idx: forward_idx } = &mut commands[prev_idx] {
+                if let Command::JumpForward { idx: ref mut forward_idx, .. } = &mut commands[prev_idx] {
                     *forward_idx = idx;
                 } else {
                     eprintln!("Error parsing input: Unexpected character");
                     std::process::exit(1);
                 }
-                Some(Command::JumpBack { idx: prev_idx })
+                Some(Command::JumpBack { idx: prev_idx, count: 0 })
             },
             _ => None,
         };
@@ -95,7 +95,7 @@ fn parse(src: String) -> Vec<Command> {
     commands
 }
 
-fn interp(commands: Vec<Command>) {
+fn interp(mut commands: Vec<Command>) {
     let mut tape: Vec<u8> = vec![0; INIT_TAPE_SIZE];
     let mut pointer = INIT_POINTER_LOC;
 
@@ -103,25 +103,45 @@ fn interp(commands: Vec<Command>) {
 
     while pc < commands.len() {
         match commands[pc] {
-            Command::IncPointer => pointer += 1,
-            Command::DecPointer => pointer -= 1,
-            Command::IncData => tape[pointer] = tape[pointer].wrapping_add(1),
-            Command::DecData => tape[pointer] = tape[pointer].wrapping_sub(1),
-            Command::Output => {
+            Command::IncPointer { ref mut count } => {
+                *count += 1;
+                pointer += 1;
+            },
+            Command::DecPointer { ref mut count } => {
+                *count += 1;
+                pointer -= 1;
+            },
+            Command::IncData { ref mut count } => {
+                *count += 1;
+                tape[pointer] = tape[pointer].wrapping_add(1);
+            },
+            Command::DecData { ref mut count } => {
+                *count += 1;
+                tape[pointer] = tape[pointer].wrapping_sub(1);
+            },
+            Command::Output { ref mut count } => {
+                *count += 1;
                 match char::from_u32(u32::from(tape[pointer])) {
                     Some(c) => print!("{}", c),
                     None => {},
                 }
             }
-            Command::Input => {
+            Command::Input { ref mut count } => {
                 use std::io::Read;
 
+                *count += 1;
                 let mut input_buf: [u8; 1] = [0; 1];
                 std::io::stdin().read_exact(&mut input_buf).expect("Failed to read input");
                 tape[pointer] = input_buf[0];
             },
-            Command::JumpForward { idx} => if tape[pointer] == 0 { pc = idx },
-            Command::JumpBack { idx } => if tape[pointer] != 0 { pc = idx },
+            Command::JumpForward { idx, ref mut count } => {
+                *count += 1;
+                if tape[pointer] == 0 { pc = idx }
+            },
+            Command::JumpBack { idx, ref mut count } => {
+                *count += 1;
+                if tape[pointer] != 0 { pc = idx }
+            },
         }
         pc += 1;
     }
