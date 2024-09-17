@@ -1,9 +1,12 @@
+mod parser;
+
 const INIT_TAPE_SIZE: usize = 65536;
 const INIT_POINTER_LOC: usize = INIT_TAPE_SIZE / 2;
 
 struct Args {
     filename: String,
     enable_profiler: bool,
+    enable_pretty_print: bool, // This disables interpretation
 }
 
 fn parse_args() -> Args {
@@ -11,12 +14,13 @@ fn parse_args() -> Args {
     let mut args_struct = Args {
         filename: "".to_string(),
         enable_profiler: false,
+        enable_pretty_print: false,
     };
-    for arg in std::env::args().skip(1) {
-        if arg == "-p" {
-            args_struct.enable_profiler = true;
-        } else {
-            tmp_filename = Some(arg);
+    for arg in std::env::args().skip(1).peekable() {
+        match arg.as_str() {
+            "-p" => args_struct.enable_profiler = true,
+            "--pretty" => args_struct.enable_pretty_print = true,
+            _ => tmp_filename = Some(arg),
         }
     }
 
@@ -24,7 +28,7 @@ fn parse_args() -> Args {
     match tmp_filename {
         Some(val) => args_struct.filename = val,
         None => {
-            eprintln!("Usage: bfr <filename> [-p]");
+            eprintln!("Usage: bfr <filename> [-p] [--pretty]");
             std::process::exit(1);
         }
     }
@@ -32,70 +36,9 @@ fn parse_args() -> Args {
     args_struct
 }
 
-#[derive(Debug)]
-enum Command {
-    IncPointer { count: usize },
-    DecPointer { count: usize },
-    IncData { count: usize },
-    DecData { count: usize },
-    Output { count: usize },
-    Input { count: usize },
-    Loop { body: Vec<Command>, start_count: usize, end_count: usize },
-}
 
-fn parse(src: String) -> Vec<Command> {
-    let mut commands: Vec<Command> = vec![];
-    let mut stack: Vec<Vec<Command>> = vec![];
-
-    for c in src.chars() {
-        let op = match c {
-            '>' => Some(Command::IncPointer { count: 0}),
-            '<' => Some(Command::DecPointer { count: 0}),
-            '+' => Some(Command::IncData { count: 0}),
-            '-' => Some(Command::DecData { count: 0}),
-            '.' => Some(Command::Output { count: 0}),
-            ',' => Some(Command::Input { count: 0}),
-            '[' => {
-                stack.push(vec![]);
-                None
-            },
-            ']' => {
-                let loop_commands = match stack.pop() {
-                    Some(cmds) => cmds,
-                    None => {
-                        eprintln!("Error parsing input: Unmatched ']'");
-                        std::process::exit(1);
-                    }
-                };
-                // Wrap loop commands in a Loop variant and push it to the current scope
-                if let Some(inner_commands) = stack.last_mut() {
-                    inner_commands.push(Command::Loop { body: loop_commands, start_count: 0, end_count: 0 });
-                } else {
-                    commands.push(Command::Loop { body: loop_commands, start_count: 0, end_count: 0 });
-                }
-                None
-            },
-            _ => None,
-        };
-
-        if let Some(op) = op {
-            if let Some(inner_commands) = stack.last_mut() {
-                inner_commands.push(op);
-            } else {
-                commands.push(op);
-            }
-        }
-    }
-
-    if stack.len() > 0 {
-        eprintln!("Error parsing input: Unmatched '['");
-        std::process::exit(1);
-    }
-
-    commands
-}
-
-fn interp(commands: &mut Vec<Command>, tape: &mut Vec<u8>, pointer: &mut usize, pc: &mut usize) {
+fn interp(commands: &mut [parser::Command], tape: &mut [u8], pointer: &mut usize, pc: &mut usize) {
+    use parser::Command;
 
     while *pc < commands.len() {
         match &mut commands[*pc] {
@@ -149,6 +92,10 @@ fn interp(commands: &mut Vec<Command>, tape: &mut Vec<u8>, pointer: &mut usize, 
     }
 }
 
+fn print_profile(commands: &[parser::Command]) {
+    
+}
+
 fn main() {
 
     let args = parse_args();
@@ -162,12 +109,20 @@ fn main() {
         }
     };
 
-    let mut commands = parse(contents);
+    let mut commands = parser::parse(&contents);
+
+    if args.enable_pretty_print {
+        let mut newline_end = true;
+        parser::pretty_print(&commands, 0, &mut newline_end);
+        return;
+    }
 
     let mut tape: Vec<u8> = vec![0; INIT_TAPE_SIZE];
     let mut pointer = INIT_POINTER_LOC;
     let mut pc = 0;
 
     interp(&mut commands, &mut tape, &mut pointer, &mut pc);
-    println!("\nTerminated normally");
+
+    println!();
+    println!("Terminated normally");
 }
