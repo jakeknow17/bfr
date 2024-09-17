@@ -92,10 +92,6 @@ fn interp(commands: &mut [parser::Command], tape: &mut [u8], pointer: &mut usize
     }
 }
 
-fn print_profile(commands: &[parser::Command]) {
-    
-}
-
 fn main() {
 
     let args = parse_args();
@@ -112,8 +108,7 @@ fn main() {
     let mut commands = parser::parse(&contents);
 
     if args.enable_pretty_print {
-        let mut newline_end = true;
-        parser::pretty_print(&commands, 0, &mut newline_end);
+        parser::pretty_print(&commands);
         return;
     }
 
@@ -125,4 +120,8 @@ fn main() {
 
     println!();
     println!("Terminated normally");
+
+    if args.enable_profiler {
+        parser::print_profile(&commands);
+    }
 }
