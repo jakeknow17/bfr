@@ -1,4 +1,5 @@
 mod parser;
+mod profiler;
 
 const INIT_TAPE_SIZE: usize = 65536;
 const INIT_POINTER_LOC: usize = INIT_TAPE_SIZE / 2;
@@ -122,6 +123,6 @@ fn main() {
     println!("Terminated normally");
 
     if args.enable_profiler {
-        parser::print_profile(&commands);
+        profiler::print_profile(&commands);
     }
 }
