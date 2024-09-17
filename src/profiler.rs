@@ -34,22 +34,22 @@ pub fn print_profile(commands: &[Command]) {
         for command in commands {
             match command {
                 Command::IncPointer { count } => { 
-                    println!("{:>8} : > : {}", curr_idx, count);
+                    println!("{:>6} : > : {}", curr_idx, count);
                 },
                 Command::DecPointer { count } => { 
-                    println!("{:>8} : < : {}", curr_idx, count);
+                    println!("{:>6} : < : {}", curr_idx, count);
                 },
                 Command::IncData { count } => { 
-                    println!("{:>8} : + : {}", curr_idx, count);
+                    println!("{:>6} : + : {}", curr_idx, count);
                 },
                 Command::DecData { count } => { 
-                    println!("{:>8} : - : {}", curr_idx, count);
+                    println!("{:>6} : - : {}", curr_idx, count);
                 },
                 Command::Output { count } => { 
-                    println!("{:>8} : . : {}", curr_idx, count);
+                    println!("{:>6} : . : {}", curr_idx, count);
                 },
                 Command::Input { count } => { 
-                    println!("{:>8} : , : {}", curr_idx, count);
+                    println!("{:>6} : , : {}", curr_idx, count);
                 },
                 Command::Loop { body, start_count, end_count } => {
                     if is_simple_loop(command) {
@@ -58,13 +58,13 @@ pub fn print_profile(commands: &[Command]) {
                         non_simple_loops.push(LoopData { idx: *curr_idx, num_executions: *end_count });
                     }
 
-                    println!("{:>8} : [ : {}", curr_idx, start_count);
+                    println!("{:>6} : [ : {}", curr_idx, start_count);
                     *curr_idx += 1;
 
                     // Recursively print the commands inside the loop
                     print_profile_rec(body, curr_idx, simple_loops, non_simple_loops);
 
-                    println!("{:>8} : ] : {}", curr_idx, end_count);
+                    println!("{:>6} : ] : {}", curr_idx, end_count);
                 },
             }
             *curr_idx += 1;
@@ -81,9 +81,9 @@ pub fn print_profile(commands: &[Command]) {
     non_simple_loops.sort_by(|a, b| b.num_executions.cmp(&a.num_executions));
 
     for simple_loop in simple_loops {
-        println!("Simple loop at index {}, executions: {}", simple_loop.idx, simple_loop.num_executions);
+        println!("[Simple Loop]     : index {:<6} : executions {}", simple_loop.idx, simple_loop.num_executions);
     }
     for non_simple_loop in non_simple_loops {
-        println!("Non-simple loop at index {}, executions: {}", non_simple_loop.idx, non_simple_loop.num_executions);
+        println!("[Non-simple Loop] : index {:<6} : executions {}", non_simple_loop.idx, non_simple_loop.num_executions);
     }
 }
