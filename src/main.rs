@@ -114,6 +114,7 @@ _start:
 
 main:
     pushq %rbp
+    pushq %r12
     movq  %rsp, %rbp
 
     # Allocate memory using mmap
@@ -147,8 +148,9 @@ fn write_assembly_footer(out_file: &mut std::fs::File) {
 
     # TODO: Check if munmap failed
 
-    movq  %rbp, %rsp
-    popq  %rbp
+    movq %rbp, %rsp
+    popq %r12
+    popq %rbp
 
     # Return to _start
     ret
@@ -162,34 +164,47 @@ fn compile(out_file: &mut std::fs::File, commands: &[parser::Command]) {
         for command in commands {
             match command {
                 Command::IncPointer { .. } => {
-                    
+                    writeln!(*out_file, "    incq %r12");
                 },
                 Command::DecPointer { .. } => {
-
+                    writeln!(*out_file, "    decq %r12");
                 },
                 Command::IncData { .. } => {
-
+                    writeln!(*out_file, "    movb (%r12), %al");
+                    writeln!(*out_file, "    incb %al");
+                    writeln!(*out_file, "    movb %al, (%r12)");
                 },
                 Command::DecData { .. } => {
-
+                    writeln!(*out_file, "    movb (%r12), %al");
+                    writeln!(*out_file, "    decb %al");
+                    writeln!(*out_file, "    movb %al, (%r12)");
                 },
                 Command::Output { .. } => {
-                    //*count += 1;
-                    //match char::from_u32(u32::from(tape[*pointer])) {
-                    //    Some(c) => print!("{}", c),
-                    //    None => {},
-                    //}
+                    writeln!(*out_file, "    movq $1,   %rax # Write system call number");
+                    writeln!(*out_file, "    movq $1,   %rdi # Stdout file descriptor");
+                    writeln!(*out_file, "    movq %r12, %rsi # Address of char to be written");
+                    writeln!(*out_file, "    movq $1,   %rdx # Write 1 byte");
+                    writeln!(*out_file, "    syscall # Make write system call");
                 }
                 Command::Input { .. } => {
-                    //use std::io::Read;
-                    //
-                    //*count += 1;
-                    //let mut input_buf: [u8; 1] = [0; 1];
-                    //std::io::stdin().read_exact(&mut input_buf).expect("Failed to read input");
-                    //tape[*pointer] = input_buf[0];
+                    writeln!(*out_file, "    movq $0,   %rax # Read system call number");
+                    writeln!(*out_file, "    movq $0,   %rdi # Stdin file descriptor");
+                    writeln!(*out_file, "    movq %r12, %rsi # Address of char to be placed");
+                    writeln!(*out_file, "    movq $1,   %rdx # Read 1 byte");
+                    writeln!(*out_file, "    syscall # Make read system call");
                 },
                 Command::Loop { body, id, .. } => {
+                    writeln!(*out_file, "    movb (%r12), %al");
+                    writeln!(*out_file, "    cmpb $0,     %al");
+                    writeln!(*out_file, "    je   loop{}_end", id);
+                    writeln!(*out_file, "loop{}:", id);
+
                     compile_rec(out_file, body);
+
+                    writeln!(*out_file, "    movb (%r12), %al");
+                    writeln!(*out_file, "    cmpb $0,     %al");
+                    writeln!(*out_file, "    jne  loop{}", id);
+                    writeln!(*out_file, "loop{}_end:", id);
                 }
             }
         }
