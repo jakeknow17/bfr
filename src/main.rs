@@ -2,101 +2,149 @@ mod parser;
 mod profiler;
 
 use std::io::{self, Write};
+use clap::Parser;
 
-const INIT_TAPE_SIZE: usize = 65536;
+const INIT_TAPE_SIZE: usize = 0x200000;
 const INIT_POINTER_LOC: usize = INIT_TAPE_SIZE / 2;
 
+#[derive(Parser)]
+#[command(name = "bfr")]
+#[command(version = "1.0")]
+#[command(about = "A simple Brainfuck interpreter written in Rust", long_about = None)]
 struct Args {
-    filename: String,
-    enable_profiler: bool,
-    enable_pretty_print: bool, // This disables interpretation
+    /// Source file
+    file_name: String,
+
+    /// Enable profiler. Requires interpretation
+    #[arg(short = 'p', long)]
+    profile: bool,
+
+    /// Pretty print parser output. Disables interpretation and compilation
+    #[arg(short = 'P', long)]
+    pretty_print: bool,
+
+    /// Name of the output file
+    #[arg(short, long = "output", value_name = "FILE", default_value_t = String::from("a.out"))]
+    out_file: String,
+
+    /// Interpret source file without compiling
+    #[arg(short, long)]
+    interp: bool,
+
+    /// Output .s assembly file
+    #[arg(short = 'S', long = "assembly")]
+    output_asm: bool,
 }
 
-fn parse_args() -> Args {
-    let mut tmp_filename = None;
-    let mut args_struct = Args {
-        filename: "".to_string(),
-        enable_profiler: false,
-        enable_pretty_print: false,
-    };
-    for arg in std::env::args().skip(1).peekable() {
-        match arg.as_str() {
-            "-p" => args_struct.enable_profiler = true,
-            "--pretty" => args_struct.enable_pretty_print = true,
-            _ => tmp_filename = Some(arg),
-        }
-    }
-
-    // Requires filename
-    match tmp_filename {
-        Some(val) => args_struct.filename = val,
-        None => {
-            eprintln!("Usage: bfr <filename> [-p] [--pretty]");
-            std::process::exit(1);
-        }
-    }
-    
-    args_struct
-}
-
-
-fn interp(commands: &mut [parser::Command], tape: &mut [u8], pointer: &mut usize, pc: &mut usize) {
+pub fn interp(commands: &mut [parser::Command]) {
     use parser::Command;
 
-    while *pc < commands.len() {
-        match &mut commands[*pc] {
-            Command::IncPointer { ref mut count } => {
-                *count += 1;
-                *pointer += 1;
-            },
-            Command::DecPointer { ref mut count } => {
-                *count += 1;
-                *pointer -= 1;
-            },
-            Command::IncData { ref mut count } => {
-                *count += 1;
-                tape[*pointer] = tape[*pointer].wrapping_add(1);
-            },
-            Command::DecData { ref mut count } => {
-                *count += 1;
-                tape[*pointer] = tape[*pointer].wrapping_sub(1);
-            },
-            Command::Output { ref mut count } => {
-                *count += 1;
-                match char::from_u32(u32::from(tape[*pointer])) {
-                    Some(c) => print!("{}", c),
-                    None => {},
-                }
-            }
-            Command::Input { ref mut count } => {
-                use std::io::Read;
-
-                *count += 1;
-                let mut input_buf: [u8; 1] = [0; 1];
-                std::io::stdin().read_exact(&mut input_buf).expect("Failed to read input");
-                tape[*pointer] = input_buf[0];
-            },
-            Command::Loop { body, id: _, ref mut start_count, ref mut end_count } => {
-                *start_count += 1;
-                while tape[*pointer] != 0 {
-                    let mut loop_pc = 0;
-                    interp(body, tape, pointer, &mut loop_pc);
-
-                    *end_count += 1;
-                    if tape[*pointer] == 0 {
-                        break;
+    fn interp_rec(commands: &mut [parser::Command], tape: &mut [u8], pointer: &mut usize, pc: &mut usize) {
+        while *pc < commands.len() {
+            match &mut commands[*pc] {
+                Command::IncPointer { ref mut count } => {
+                    *count += 1;
+                    *pointer += 1;
+                },
+                Command::DecPointer { ref mut count } => {
+                    *count += 1;
+                    *pointer -= 1;
+                },
+                Command::IncData { ref mut count } => {
+                    *count += 1;
+                    tape[*pointer] = tape[*pointer].wrapping_add(1);
+                },
+                Command::DecData { ref mut count } => {
+                    *count += 1;
+                    tape[*pointer] = tape[*pointer].wrapping_sub(1);
+                },
+                Command::Output { ref mut count } => {
+                    *count += 1;
+                    match char::from_u32(u32::from(tape[*pointer])) {
+                        Some(c) => print!("{}", c),
+                        None => {},
                     }
+                }
+                Command::Input { ref mut count } => {
+                    use std::io::Read;
 
+                    *count += 1;
+                    let mut input_buf: [u8; 1] = [0; 1];
+                    std::io::stdin().read_exact(&mut input_buf).expect("Failed to read input");
+                    tape[*pointer] = input_buf[0];
+                },
+                Command::Loop { body, id: _, ref mut start_count, ref mut end_count } => {
                     *start_count += 1;
+                    while tape[*pointer] != 0 {
+                        let mut loop_pc = 0;
+                        interp_rec(body, tape, pointer, &mut loop_pc);
+
+                        *end_count += 1;
+                        if tape[*pointer] == 0 {
+                            break;
+                        }
+
+                        *start_count += 1;
+                    }
                 }
             }
+            *pc += 1;
         }
-        *pc += 1;
+    }
+    let mut tape: Vec<u8> = vec![0; INIT_TAPE_SIZE];
+    let mut pointer = INIT_POINTER_LOC;
+    let mut pc = 0;
+    interp_rec(commands, &mut tape, &mut pointer, &mut pc);
+}
+
+fn assemble_and_link_string(asm_string: &String) {
+    let object_file = "output.o";
+    let output_file = "output";
+
+    // Step 1: Spawn the `as` process, capturing its stdout
+    let mut as_process = std::process::Command::new("as")
+        .arg("-o")
+        .arg(object_file)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn 'as' process");
+
+    // Write the assembly code to the stdin of the `as` process
+    {
+        let stdin = as_process.stdin.as_mut().expect("Failed to open stdin");
+        stdin.write_all(asm_string.as_bytes()).expect("Failed to write to stdin");
+    }
+
+    // Wait for `as` to finish
+    let as_status = as_process
+        .wait()
+        .expect("Failed to wait on 'as' process");
+
+    if !as_status.success() {
+        eprintln!("`as` failed with exit code: {:?}", as_status.code());
+        return;
+    }
+
+    // Step 2: Spawn the `ld` process, using `as_output.stdout` as its input
+    let mut ld_process = std::process::Command::new("ld")
+        .arg("-o")
+        .arg(output_file)        // The output binary to be linked
+        .arg(object_file)
+        .spawn()
+        .expect("Failed to spawn 'ld' process");
+
+    // Wait for `ld` to finish linking
+    let ld_status = ld_process
+        .wait()
+        .expect("Failed to wait on 'ld' process");
+
+    if !ld_status.success() {
+        eprintln!("`ld` failed with code: {:?}", ld_status.code());
     }
 }
 
-fn write_assembly_header(out_file: &mut std::fs::File) {
-    writeln!(*out_file, r#"
+fn append_assembly_header(out_string: &mut String) {
+    out_string.push_str(r#"
 .section .text
 
 .globl _start
@@ -132,12 +180,11 @@ main:
     movq %rax,      %r12 # Move tape address into callee saved register
     addq $0x100000, %r12 # Move the pointer to the middle of the tape
 
-    # Begin program code
-    "#);
+    # Begin program code"#);
 }
 
-fn write_assembly_footer(out_file: &mut std::fs::File) {
-    writeln!(*out_file, r#"
+fn append_assembly_footer(out_string: &mut String) {
+    out_string.push_str(r#"
     # Should be at the bottom of main
     
     # Unmap memory from mmap
@@ -154,106 +201,111 @@ fn write_assembly_footer(out_file: &mut std::fs::File) {
 
     # Return to _start
     ret
-    "#);
+"#);
 }
 
-fn compile(out_file: &mut std::fs::File, commands: &[parser::Command]) {
+fn compile(commands: &[parser::Command], src_filename: &str, dest_filename: &str, output_asm_file: bool) {
     use parser::Command;
 
-    fn compile_rec(out_file: &mut std::fs::File, commands: &[parser::Command]) {
+    fn compile_rec(out_string: &mut String, commands: &[parser::Command]) {
         for command in commands {
             match command {
                 Command::IncPointer { .. } => {
-                    writeln!(*out_file, "    incq %r12");
+                    out_string.push_str("    incq %r12\n");
                 },
                 Command::DecPointer { .. } => {
-                    writeln!(*out_file, "    decq %r12");
+                    out_string.push_str("    decq %r12\n");
                 },
                 Command::IncData { .. } => {
-                    writeln!(*out_file, "    movb (%r12), %al");
-                    writeln!(*out_file, "    incb %al");
-                    writeln!(*out_file, "    movb %al, (%r12)");
+                    out_string.push_str("    movb (%r12), %al\n");
+                    out_string.push_str("    incb %al\n");
+                    out_string.push_str("    movb %al, (%r12)\n");
                 },
                 Command::DecData { .. } => {
-                    writeln!(*out_file, "    movb (%r12), %al");
-                    writeln!(*out_file, "    decb %al");
-                    writeln!(*out_file, "    movb %al, (%r12)");
+                    out_string.push_str("    movb (%r12), %al\n");
+                    out_string.push_str("    decb %al\n");
+                    out_string.push_str("    movb %al, (%r12)\n");
                 },
                 Command::Output { .. } => {
-                    writeln!(*out_file, "    movq $1,   %rax # Write system call number");
-                    writeln!(*out_file, "    movq $1,   %rdi # Stdout file descriptor");
-                    writeln!(*out_file, "    movq %r12, %rsi # Address of char to be written");
-                    writeln!(*out_file, "    movq $1,   %rdx # Write 1 byte");
-                    writeln!(*out_file, "    syscall # Make write system call");
+                    out_string.push_str("    movq $1,   %rax # Write system call number\n");
+                    out_string.push_str("    movq $1,   %rdi # Stdout file descriptor\n");
+                    out_string.push_str("    movq %r12, %rsi # Address of char to be written\n");
+                    out_string.push_str("    movq $1,   %rdx # Write 1 byte\n");
+                    out_string.push_str("    syscall # Make write system call\n");
                 }
                 Command::Input { .. } => {
-                    writeln!(*out_file, "    movq $0,   %rax # Read system call number");
-                    writeln!(*out_file, "    movq $0,   %rdi # Stdin file descriptor");
-                    writeln!(*out_file, "    movq %r12, %rsi # Address of char to be placed");
-                    writeln!(*out_file, "    movq $1,   %rdx # Read 1 byte");
-                    writeln!(*out_file, "    syscall # Make read system call");
+                    out_string.push_str("    movq $0,   %rax # Read system call number\n");
+                    out_string.push_str("    movq $0,   %rdi # Stdin file descriptor\n");
+                    out_string.push_str("    movq %r12, %rsi # Address of char to be placed\n");
+                    out_string.push_str("    movq $1,   %rdx # Read 1 byte\n");
+                    out_string.push_str("    syscall # Make read system call\n");
                 },
                 Command::Loop { body, id, .. } => {
-                    writeln!(*out_file, "    movb (%r12), %al");
-                    writeln!(*out_file, "    cmpb $0,     %al");
-                    writeln!(*out_file, "    je   loop{}_end", id);
-                    writeln!(*out_file, "loop{}:", id);
+                    out_string.push_str("    movb (%r12), %al\n");
+                    out_string.push_str("    cmpb $0,     %al\n");
+                    out_string.push_str(&format!("    je   loop{}_end\n", id));
+                    out_string.push_str(&format!("loop{}:\n", id));
 
-                    compile_rec(out_file, body);
+                    compile_rec(out_string, body);
 
-                    writeln!(*out_file, "    movb (%r12), %al");
-                    writeln!(*out_file, "    cmpb $0,     %al");
-                    writeln!(*out_file, "    jne  loop{}", id);
-                    writeln!(*out_file, "loop{}_end:", id);
+                    out_string.push_str("    movb (%r12), %al\n");
+                    out_string.push_str("    cmpb $0,     %al\n");
+                    out_string.push_str(&format!("    jne  loop{}\n", id));
+                    out_string.push_str(&format!("loop{}_end:\n", id));
                 }
             }
         }
     }
 
-    write_assembly_header(out_file);
-    compile_rec(out_file, commands);
-    write_assembly_footer(out_file);
+    let mut asm = String::new();
+    append_assembly_header(&mut asm);
+    compile_rec(&mut asm, commands);
+    append_assembly_footer(&mut asm);
+
+    if output_asm_file {
+        let asm_filename = if let Some(pos) = src_filename.rfind('.') {
+            format!("{}{}", &src_filename[..pos], ".s")
+        } else {
+            format!("{}{}", &src_filename, ".s")
+        };
+        let mut asm_file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(asm_filename)
+            .expect("Unable to open output file");
+        asm_file.write_all(asm.as_bytes());
+    }
+
+    assemble_and_link_string(&asm);
 }
 
 fn main() {
 
-    let args = parse_args();
+    let args = Args::parse();
 
     // Read the file contents
-    let src_contents = match std::fs::read_to_string(&args.filename) {
+    let src_contents = match std::fs::read_to_string(&args.file_name) {
         Ok(contents) => contents,
         Err(e) => {
-            eprintln!("Error reading file {}: {}", args.filename, e);
+            eprintln!("Error reading file {}: {}", args.file_name, e);
             std::process::exit(1);
         }
     };
 
-    let mut out_file = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open("bfr.s")
-        .expect("Unable to open output file");
-
     let mut commands = parser::parse(&src_contents);
-
-    if args.enable_pretty_print {
+    if args.pretty_print {
         parser::pretty_print(&commands);
         return;
     }
 
-    compile(&mut out_file, &commands);
+    if args.interp {
+        interp(&mut commands);
+        if args.profile {
+            profiler::print_profile(&commands);
+        }
+        return;
+    }
 
-    //let mut tape: Vec<u8> = vec![0; INIT_TAPE_SIZE];
-    //let mut pointer = INIT_POINTER_LOC;
-    //let mut pc = 0;
-    //
-    //interp(&mut commands, &mut tape, &mut pointer, &mut pc);
-    //
-    //println!();
-    //println!("Terminated normally");
-    //
-    //if args.enable_profiler {
-    //    profiler::print_profile(&commands);
-    //}
+    compile(&commands, &args.file_name, &args.out_file, args.output_asm);
 }
