@@ -6,12 +6,13 @@ pub enum Command {
     DecData { count: usize },
     Output { count: usize },
     Input { count: usize },
-    Loop { body: Vec<Command>, start_count: usize, end_count: usize },
+    Loop { body: Vec<Command>, id: usize, start_count: usize, end_count: usize },
 }
 
 pub fn parse(src: &String) -> Vec<Command> {
     let mut commands: Vec<Command> = vec![];
     let mut stack: Vec<Vec<Command>> = vec![];
+    let mut loop_id: usize = 0;
 
     for c in src.chars() {
         let op = match c {
@@ -26,6 +27,8 @@ pub fn parse(src: &String) -> Vec<Command> {
                 None
             },
             ']' => {
+                loop_id += 1;
+
                 let loop_commands = match stack.pop() {
                     Some(cmds) => cmds,
                     None => {
@@ -35,9 +38,9 @@ pub fn parse(src: &String) -> Vec<Command> {
                 };
                 // Wrap loop commands in a Loop variant and push it to the current scope
                 if let Some(inner_commands) = stack.last_mut() {
-                    inner_commands.push(Command::Loop { body: loop_commands, start_count: 0, end_count: 0 });
+                    inner_commands.push(Command::Loop { body: loop_commands, id: loop_id, start_count: 0, end_count: 0 });
                 } else {
-                    commands.push(Command::Loop { body: loop_commands, start_count: 0, end_count: 0 });
+                    commands.push(Command::Loop { body: loop_commands, id: loop_id, start_count: 0, end_count: 0 });
                 }
                 None
             },

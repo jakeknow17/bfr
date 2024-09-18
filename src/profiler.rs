@@ -51,7 +51,7 @@ pub fn print_profile(commands: &[Command]) {
                 Command::Input { count } => { 
                     println!("{:>6} : , : {}", curr_idx, count);
                 },
-                Command::Loop { body, start_count, end_count } => {
+                Command::Loop { body, id: _, start_count, end_count } => {
                     if is_simple_loop(command) {
                         simple_loops.push(LoopData { idx: *curr_idx, num_executions: *end_count });
                     } else {
