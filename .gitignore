@@ -1,3 +1,6 @@
 /target
 /benches
 /build
+*.s
+*.o
+a.out

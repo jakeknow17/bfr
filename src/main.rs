@@ -1,8 +1,8 @@
 mod parser;
 mod profiler;
 
-use std::io::{self, Write};
 use clap::Parser;
+use std::io::Write;
 
 const INIT_TAPE_SIZE: usize = 0x200000;
 const INIT_POINTER_LOC: usize = INIT_TAPE_SIZE / 2;
@@ -97,14 +97,30 @@ pub fn interp(commands: &mut [parser::Command]) {
     interp_rec(commands, &mut tape, &mut pointer, &mut pc);
 }
 
-fn assemble_and_link_string(asm_string: &String) {
-    let object_file = "output.o";
-    let output_file = "output";
+pub fn replace_extension_filepath(filepath: &str, ext: &str) -> String {
+    return if let Some(pos) = filepath.rfind('.') {
+        format!("{}{}", &filepath[..pos], ext)
+    } else {
+        format!("{}{}", &filepath, ext)
+    };
+}
+
+pub fn strip_directories_filepath(filepath: &str) -> &str {
+    return if let Some(pos) = filepath.rfind('/') {
+        &filepath[pos+1..]
+    } else {
+        filepath
+    };
+}
+
+fn assemble_and_link_string(asm_string: &str, src_filepath: &str, dest_file: &str) {
+    let object_filepath = replace_extension_filepath(src_filepath, ".o");
+    let object_filepath = strip_directories_filepath(&object_filepath);
 
     // Step 1: Spawn the `as` process, capturing its stdout
     let mut as_process = std::process::Command::new("as")
         .arg("-o")
-        .arg(object_file)
+        .arg(&object_filepath)
         .stdin(std::process::Stdio::piped())
         .spawn()
         .expect("Failed to spawn 'as' process");
@@ -128,8 +144,8 @@ fn assemble_and_link_string(asm_string: &String) {
     // Step 2: Spawn the `ld` process, using `as_output.stdout` as its input
     let mut ld_process = std::process::Command::new("ld")
         .arg("-o")
-        .arg(output_file)        // The output binary to be linked
-        .arg(object_file)
+        .arg(dest_file)        // The output binary to be linked
+        .arg(object_filepath)
         .spawn()
         .expect("Failed to spawn 'ld' process");
 
@@ -263,21 +279,19 @@ fn compile(commands: &[parser::Command], src_filename: &str, dest_filename: &str
     append_assembly_footer(&mut asm);
 
     if output_asm_file {
-        let asm_filename = if let Some(pos) = src_filename.rfind('.') {
-            format!("{}{}", &src_filename[..pos], ".s")
-        } else {
-            format!("{}{}", &src_filename, ".s")
-        };
+        println!("Outputting asm!");
+        let asm_filepath = replace_extension_filepath(src_filename, ".s");
+        let asm_filepath = strip_directories_filepath(&asm_filepath);
         let mut asm_file = std::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(asm_filename)
+            .open(&asm_filepath)
             .expect("Unable to open output file");
-        asm_file.write_all(asm.as_bytes());
+        asm_file.write_all(asm.as_bytes()).expect("Unable to write to assembly file");
     }
 
-    assemble_and_link_string(&asm);
+    assemble_and_link_string(&asm, src_filename, dest_filename);
 }
 
 fn main() {
