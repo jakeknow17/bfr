@@ -33,16 +33,16 @@ pub fn print_profile(commands: &[Command]) {
     fn print_profile_rec(commands: &[Command], curr_idx: &mut usize, simple_loops: &mut Vec<LoopData>, non_simple_loops: &mut Vec<LoopData>) {
         for command in commands {
             match command {
-                Command::IncPointer { count } => { 
+                Command::IncPointer { amount, count } => { 
                     println!("{:>6} : > : {}", curr_idx, count);
                 },
-                Command::DecPointer { count } => { 
+                Command::DecPointer { amount, count } => { 
                     println!("{:>6} : < : {}", curr_idx, count);
                 },
-                Command::IncData { count } => { 
+                Command::IncData { offset, amount, count } => { 
                     println!("{:>6} : + : {}", curr_idx, count);
                 },
-                Command::DecData { count } => { 
+                Command::DecData { offset, amount, count } => { 
                     println!("{:>6} : - : {}", curr_idx, count);
                 },
                 Command::Output { count } => { 

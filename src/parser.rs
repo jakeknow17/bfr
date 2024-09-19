@@ -1,9 +1,9 @@
 #[derive(Debug)]
 pub enum Command {
-    IncPointer { count: usize },
-    DecPointer { count: usize },
-    IncData { count: usize },
-    DecData { count: usize },
+    IncPointer { amount: usize, count: usize },
+    DecPointer { amount: usize, count: usize },
+    IncData { offset: isize, amount: u8, count: usize },
+    DecData { offset: isize, amount: u8, count: usize },
     Output { count: usize },
     Input { count: usize },
     Loop { body: Vec<Command>, id: usize, start_count: usize, end_count: usize },
@@ -16,10 +16,10 @@ pub fn parse(src: &String) -> Vec<Command> {
 
     for c in src.chars() {
         let op = match c {
-            '>' => Some(Command::IncPointer { count: 0}),
-            '<' => Some(Command::DecPointer { count: 0}),
-            '+' => Some(Command::IncData { count: 0}),
-            '-' => Some(Command::DecData { count: 0}),
+            '>' => Some(Command::IncPointer { amount: 1, count: 0}),
+            '<' => Some(Command::DecPointer { amount: 1, count: 0}),
+            '+' => Some(Command::IncData { offset: 0, amount: 1, count: 0}),
+            '-' => Some(Command::DecData { offset: 0, amount: 1, count: 0}),
             '.' => Some(Command::Output { count: 0}),
             ',' => Some(Command::Input { count: 0}),
             '[' => {
@@ -73,19 +73,19 @@ pub fn pretty_print(commands: &[Command]) {
                 print!("{}", indent);
             }
             match command {
-                Command::IncPointer { .. } => { 
+                Command::IncPointer { amount, .. } => { 
                     print!(">"); 
                     *newline_end = false;
                 },
-                Command::DecPointer { .. } => { 
+                Command::DecPointer { amount, .. } => { 
                     print!("<"); 
                     *newline_end = false;
                 },
-                Command::IncData { .. } => { 
+                Command::IncData { offset, amount, .. } => { 
                     print!("+"); 
                     *newline_end = false;
                 },
-                Command::DecData { .. } => { 
+                Command::DecData { offset, amount, .. } => { 
                     print!("-"); 
                     *newline_end = false;
                 },

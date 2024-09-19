@@ -1,3 +1,4 @@
+mod optimizer;
 mod parser;
 mod profiler;
 
@@ -42,21 +43,21 @@ pub fn interp(commands: &mut [parser::Command]) {
     fn interp_rec(commands: &mut [parser::Command], tape: &mut [u8], pointer: &mut usize, pc: &mut usize) {
         while *pc < commands.len() {
             match &mut commands[*pc] {
-                Command::IncPointer { ref mut count } => {
+                Command::IncPointer { amount, ref mut count } => {
                     *count += 1;
-                    *pointer += 1;
+                    *pointer += *amount;
                 },
-                Command::DecPointer { ref mut count } => {
+                Command::DecPointer { amount, ref mut count } => {
                     *count += 1;
-                    *pointer -= 1;
+                    *pointer -= *amount;
                 },
-                Command::IncData { ref mut count } => {
+                Command::IncData { offset, amount, ref mut count } => {
                     *count += 1;
-                    tape[*pointer] = tape[*pointer].wrapping_add(1);
+                    tape[pointer.saturating_add_signed(*offset)] = tape[pointer.saturating_add_signed(*offset)].wrapping_add(*amount);
                 },
-                Command::DecData { ref mut count } => {
+                Command::DecData { offset, amount, ref mut count } => {
                     *count += 1;
-                    tape[*pointer] = tape[*pointer].wrapping_sub(1);
+                    tape[pointer.saturating_add_signed(*offset)] = tape[pointer.saturating_add_signed(*offset)].wrapping_sub(*amount);
                 },
                 Command::Output { ref mut count } => {
                     *count += 1;
@@ -226,21 +227,39 @@ fn compile(commands: &[parser::Command], src_filename: &str, dest_filename: &str
     fn compile_rec(out_string: &mut String, commands: &[parser::Command]) {
         for command in commands {
             match command {
-                Command::IncPointer { .. } => {
-                    out_string.push_str("    incq %r12\n");
+                Command::IncPointer { amount, .. } => {
+                    if (*amount == 1) {
+                        out_string.push_str("    incq %r12\n");
+                    } else {
+                        out_string.push_str(&format!("    addq ${}, %r12\n", amount));
+                    }
                 },
-                Command::DecPointer { .. } => {
-                    out_string.push_str("    decq %r12\n");
+                Command::DecPointer { amount, .. } => {
+                    if (*amount == 1) {
+                        out_string.push_str("    decq %r12\n");
+                    } else {
+                        out_string.push_str(&format!("    subq ${}, %r12\n", amount));
+                    }
                 },
-                Command::IncData { .. } => {
-                    out_string.push_str("    movb (%r12), %al\n");
-                    out_string.push_str("    incb %al\n");
-                    out_string.push_str("    movb %al, (%r12)\n");
+                Command::IncData { offset, amount, .. } => {
+                    let offset_str = if *offset == 0 { String::from("") } else { offset.to_string() };
+                    out_string.push_str(&format!("    movb {}(%r12), %al\n", &offset_str));
+                    if (*amount == 1) {
+                        out_string.push_str("    incb %al\n");
+                    } else {
+                        out_string.push_str(&format!("    addb ${}, %al\n", amount));
+                    }
+                    out_string.push_str(&format!("    movb %al, {}(%r12)\n", &offset_str));
                 },
-                Command::DecData { .. } => {
-                    out_string.push_str("    movb (%r12), %al\n");
-                    out_string.push_str("    decb %al\n");
-                    out_string.push_str("    movb %al, (%r12)\n");
+                Command::DecData { offset, amount, .. } => {
+                    let offset_str = if *offset == 0 { String::from("") } else { offset.to_string() };
+                    out_string.push_str(&format!("    movb {}(%r12), %al\n", &offset_str));
+                    if (*amount == 1) {
+                        out_string.push_str("    decb %al\n");
+                    } else {
+                        out_string.push_str(&format!("    subb ${}, %al\n", amount));
+                    }
+                    out_string.push_str(&format!("    movb %al, {}(%r12)\n", &offset_str));
                 },
                 Command::Output { .. } => {
                     out_string.push_str("    movq $1,   %rax # Write system call number\n");
