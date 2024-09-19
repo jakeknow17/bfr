@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Command {
     IncPointer { amount: usize, count: usize },
     DecPointer { amount: usize, count: usize },
@@ -74,19 +74,37 @@ pub fn pretty_print(commands: &[Command]) {
             }
             match command {
                 Command::IncPointer { amount, .. } => { 
-                    print!(">"); 
+                    if *amount == 1 {
+                        print!(">"); 
+                    } else {
+                        print!(">{}", amount);
+                    }
                     *newline_end = false;
                 },
                 Command::DecPointer { amount, .. } => { 
-                    print!("<"); 
+                    if *amount == 1 {
+                        print!("<"); 
+                    } else {
+                        print!("<{}", amount);
+                    }
                     *newline_end = false;
                 },
                 Command::IncData { offset, amount, .. } => { 
-                    print!("+"); 
+                    let offset_str = if *offset == 0 { String::from("") } else { format!("({})", offset) };
+                    if *amount == 1 {
+                        print!("{}+", offset_str); 
+                    } else {
+                        print!("{}+{}", offset_str, amount); 
+                    }
                     *newline_end = false;
                 },
                 Command::DecData { offset, amount, .. } => { 
-                    print!("-"); 
+                    let offset_str = if *offset == 0 { String::from("") } else { format!("({})", offset) };
+                    if *amount == 1 {
+                        print!("{}-", offset_str); 
+                    } else {
+                        print!("{}-{}", offset_str, amount); 
+                    }
                     *newline_end = false;
                 },
                 Command::Output { .. } => { 

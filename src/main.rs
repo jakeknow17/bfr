@@ -16,7 +16,7 @@ struct Args {
     /// Source file
     file_name: String,
 
-    /// Enable profiler. Requires interpretation
+    /// Enable profiler. Also enables interpretation
     #[arg(short = 'p', long)]
     profile: bool,
 
@@ -228,14 +228,14 @@ fn compile(commands: &[parser::Command], src_filename: &str, dest_filename: &str
         for command in commands {
             match command {
                 Command::IncPointer { amount, .. } => {
-                    if (*amount == 1) {
+                    if *amount == 1 {
                         out_string.push_str("    incq %r12\n");
                     } else {
                         out_string.push_str(&format!("    addq ${}, %r12\n", amount));
                     }
                 },
                 Command::DecPointer { amount, .. } => {
-                    if (*amount == 1) {
+                    if *amount == 1 {
                         out_string.push_str("    decq %r12\n");
                     } else {
                         out_string.push_str(&format!("    subq ${}, %r12\n", amount));
@@ -244,7 +244,7 @@ fn compile(commands: &[parser::Command], src_filename: &str, dest_filename: &str
                 Command::IncData { offset, amount, .. } => {
                     let offset_str = if *offset == 0 { String::from("") } else { offset.to_string() };
                     out_string.push_str(&format!("    movb {}(%r12), %al\n", &offset_str));
-                    if (*amount == 1) {
+                    if *amount == 1 {
                         out_string.push_str("    incb %al\n");
                     } else {
                         out_string.push_str(&format!("    addb ${}, %al\n", amount));
@@ -254,7 +254,7 @@ fn compile(commands: &[parser::Command], src_filename: &str, dest_filename: &str
                 Command::DecData { offset, amount, .. } => {
                     let offset_str = if *offset == 0 { String::from("") } else { offset.to_string() };
                     out_string.push_str(&format!("    movb {}(%r12), %al\n", &offset_str));
-                    if (*amount == 1) {
+                    if *amount == 1 {
                         out_string.push_str("    decb %al\n");
                     } else {
                         out_string.push_str(&format!("    subb ${}, %al\n", amount));
@@ -327,12 +327,13 @@ fn main() {
     };
 
     let mut commands = parser::parse(&src_contents);
+    optimizer::optimize(&mut commands);
     if args.pretty_print {
         parser::pretty_print(&commands);
         return;
     }
 
-    if args.interp {
+    if args.interp || args.profile {
         interp(&mut commands);
         if args.profile {
             profiler::print_profile(&commands);

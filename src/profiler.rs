@@ -34,22 +34,44 @@ pub fn print_profile(commands: &[Command]) {
         for command in commands {
             match command {
                 Command::IncPointer { amount, count } => { 
-                    println!("{:>6} : > : {}", curr_idx, count);
+                    let repr = if *amount == 1 {
+                        String::from(">")
+                    } else {
+                        format!(">{}", amount)
+                    };
+                    println!("{:>6} : {:^6} : {}", curr_idx, repr, count);
                 },
                 Command::DecPointer { amount, count } => { 
-                    println!("{:>6} : < : {}", curr_idx, count);
+                    let repr = if *amount == 1 {
+                        String::from("<")
+                    } else {
+                        format!("<{}", amount)
+                    };
+                    println!("{:>6} : {:^6} : {}", curr_idx, repr, count);
                 },
                 Command::IncData { offset, amount, count } => { 
-                    println!("{:>6} : + : {}", curr_idx, count);
+                    let offset_str = if *offset == 0 { String::from("") } else { format!("({})", offset) };
+                    let repr = if *amount == 1 {
+                        format!("{}+", offset_str) 
+                    } else {
+                        format!("{}+{}", offset_str, amount) 
+                    };
+                    println!("{:>6} : {:^6} : {}", curr_idx, repr, count);
                 },
                 Command::DecData { offset, amount, count } => { 
-                    println!("{:>6} : - : {}", curr_idx, count);
+                    let offset_str = if *offset == 0 { String::from("") } else { format!("({})", offset) };
+                    let repr = if *amount == 1 {
+                        format!("{}-", offset_str) 
+                    } else {
+                        format!("{}-{}", offset_str, amount) 
+                    };
+                    println!("{:>6} : {:^6} : {}", curr_idx, repr, count);
                 },
                 Command::Output { count } => { 
-                    println!("{:>6} : . : {}", curr_idx, count);
+                    println!("{:>6} : {:^6} : {}", curr_idx, ".", count);
                 },
                 Command::Input { count } => { 
-                    println!("{:>6} : , : {}", curr_idx, count);
+                    println!("{:>6} : {:^6} : {}", curr_idx, ",", count);
                 },
                 Command::Loop { body, id: _, start_count, end_count } => {
                     if is_simple_loop(command) {
@@ -58,13 +80,13 @@ pub fn print_profile(commands: &[Command]) {
                         non_simple_loops.push(LoopData { idx: *curr_idx, num_executions: *end_count });
                     }
 
-                    println!("{:>6} : [ : {}", curr_idx, start_count);
+                    println!("{:>6} : {:^6} : {}", curr_idx, "[", start_count);
                     *curr_idx += 1;
 
                     // Recursively print the commands inside the loop
                     print_profile_rec(body, curr_idx, simple_loops, non_simple_loops);
 
-                    println!("{:>6} : ] : {}", curr_idx, end_count);
+                    println!("{:>6} : {:^6} : {}", curr_idx, "]", end_count);
                 },
             }
             *curr_idx += 1;
