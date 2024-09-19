@@ -229,61 +229,63 @@ fn compile(commands: &[parser::Command], src_filename: &str, dest_filename: &str
             match command {
                 Command::IncPointer { amount, .. } => {
                     if *amount == 1 {
-                        out_string.push_str("    incq %r12\n");
+                        out_string.push_str("    incq %r12            # >\n");
                     } else {
-                        out_string.push_str(&format!("    addq ${}, %r12\n", amount));
+                        out_string.push_str(&format!("{:24}# >{}\n", format!("    addq ${}, %r12", amount), amount));
                     }
                 },
                 Command::DecPointer { amount, .. } => {
                     if *amount == 1 {
-                        out_string.push_str("    decq %r12\n");
+                        out_string.push_str("    decq %r12            # <\n");
                     } else {
-                        out_string.push_str(&format!("    subq ${}, %r12\n", amount));
+                        out_string.push_str(&format!("{:24} # <{}\n", format!("    subq ${}, %r12", amount), amount));
                     }
                 },
                 Command::IncData { offset, amount, .. } => {
                     let offset_str = if *offset == 0 { String::from("") } else { offset.to_string() };
-                    out_string.push_str(&format!("    movb {}(%r12), %al\n", &offset_str));
                     if *amount == 1 {
+                        out_string.push_str(&format!("{:24} # +\n", format!("    movb {}(%r12), %al", &offset_str)));
                         out_string.push_str("    incb %al\n");
                     } else {
+                        out_string.push_str(&format!("{:24} # +{}\n", format!("    movb {}(%r12), %al", &offset_str), amount));
                         out_string.push_str(&format!("    addb ${}, %al\n", amount));
                     }
                     out_string.push_str(&format!("    movb %al, {}(%r12)\n", &offset_str));
                 },
                 Command::DecData { offset, amount, .. } => {
                     let offset_str = if *offset == 0 { String::from("") } else { offset.to_string() };
-                    out_string.push_str(&format!("    movb {}(%r12), %al\n", &offset_str));
                     if *amount == 1 {
+                        out_string.push_str(&format!("{:24} # +\n",format!("    movb {}(%r12), %al", &offset_str)));
                         out_string.push_str("    decb %al\n");
                     } else {
+                        out_string.push_str(&format!("{:24} # +{}\n", format!("    movb {}(%r12), %al", &offset_str), amount));
                         out_string.push_str(&format!("    subb ${}, %al\n", amount));
                     }
                     out_string.push_str(&format!("    movb %al, {}(%r12)\n", &offset_str));
                 },
                 Command::Output { .. } => {
-                    out_string.push_str("    movq $1,   %rax # Write system call number\n");
-                    out_string.push_str("    movq $1,   %rdi # Stdout file descriptor\n");
-                    out_string.push_str("    movq %r12, %rsi # Address of char to be written\n");
-                    out_string.push_str("    movq $1,   %rdx # Write 1 byte\n");
-                    out_string.push_str("    syscall # Make write system call\n");
+                    out_string.push_str("    movq $1,   %rax      # .\n");
+                    out_string.push_str("    movq $1,   %rdi\n");
+                    out_string.push_str("    movq %r12, %rsi\n");
+                    out_string.push_str("    movq $1,   %rdx\n");
+                    out_string.push_str("    syscall\n");
                 }
                 Command::Input { .. } => {
-                    out_string.push_str("    movq $0,   %rax # Read system call number\n");
-                    out_string.push_str("    movq $0,   %rdi # Stdin file descriptor\n");
-                    out_string.push_str("    movq %r12, %rsi # Address of char to be placed\n");
-                    out_string.push_str("    movq $1,   %rdx # Read 1 byte\n");
-                    out_string.push_str("    syscall # Make read system call\n");
+                    out_string.push_str("    movq $0,   %rax      # ,\n");
+                    out_string.push_str("    movq $0,   %rdi\n");
+                    out_string.push_str("    movq %r12, %rsi\n");
+                    out_string.push_str("    movq $1,   %rdx\n");
+                    out_string.push_str("    syscall\n");
                 },
                 Command::Loop { body, id, .. } => {
-                    out_string.push_str("    movb (%r12), %al\n");
+                    out_string.push_str("    movb (%r12), %al     # [\n");
                     out_string.push_str("    cmpb $0,     %al\n");
                     out_string.push_str(&format!("    je   loop{}_end\n", id));
                     out_string.push_str(&format!("loop{}:\n", id));
 
                     compile_rec(out_string, body);
 
-                    out_string.push_str("    movb (%r12), %al\n");
+                    out_string.push_str("    movb (%r12), %al     # ]\n");
                     out_string.push_str("    cmpb $0,     %al\n");
                     out_string.push_str(&format!("    jne  loop{}\n", id));
                     out_string.push_str(&format!("loop{}_end:\n", id));
