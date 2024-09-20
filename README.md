@@ -1,6 +1,6 @@
 # bfr
 
-**bfr** is a simple Brainfuck interpreter written in Rust. It reads a Brainfuck source file and executes it.
+**bfr** is a simple Brainfuck interpreter and compiler written in Rust. It reads a Brainfuck source file and executes it.
 
 ## Building
 
@@ -34,6 +34,9 @@ Where `<FILE_NAME>` is the path to the Brainfuck source file.
 - `-O <LEVEL>`: Set the optimization level, where `<LEVEL>` is between 0 and 3. Default is 1.
 - `-h`, `--help`: Show help information.
 - `-V`, `--version`: Show the version information.
+
+### Note:
+When compiling Brainfuck files, the `as` (assembler) and `ld` (linker) programs are required to generate executable files. Make sure they are installed and available in your system's PATH.
 
 ## Examples
 
