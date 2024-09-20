@@ -31,7 +31,7 @@ Where `<FILE_NAME>` is the path to the Brainfuck source file.
 - `-i`, `--interp`: Interpret the Brainfuck source file without compiling it.
 - `-S`, `--assembly`: Output the generated assembly file.
 - `-c`, `--object`: Output an object file.
-- `-O <LEVEL>`: Set the optimization level, where `<LEVEL>` is between 0 and 3. Default is 1.
+- `-O<LEVEL>`: Set the optimization level, where `<LEVEL>` is between 0 and 3. Default is 1.
 - `-h`, `--help`: Show help information.
 - `-V`, `--version`: Show the version information.
 
@@ -50,7 +50,7 @@ To compile Brainfuck file to an executable:
 ./target/release/bfr -o program.out path/to/your/program.bf
 ```
 
-To output assembly code for a Brainfuck file:
+To output assembly code (and a compiled executable) from a Brainfuck file:
 ```bash
 ./target/release/bfr -S path/to/your/program.bf
 ```
