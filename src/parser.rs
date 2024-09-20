@@ -4,8 +4,9 @@ pub enum Command {
     DecPointer { amount: usize, count: usize },
     IncData { offset: isize, amount: u8, count: usize },
     DecData { offset: isize, amount: u8, count: usize },
+    SetData { offset: isize, value: u8,  count: usize },
     Output { count: usize },
-    Input { count: usize },
+    Input {  count: usize },
     Loop { body: Vec<Command>, id: usize, start_count: usize, end_count: usize },
 }
 
@@ -105,6 +106,11 @@ pub fn pretty_print(commands: &[Command]) {
                     } else {
                         print!("{}-{}", offset_str, amount); 
                     }
+                    *newline_end = false;
+                },
+                Command::SetData { offset, value, .. } => { 
+                    let offset_str = if *offset == 0 { String::from("") } else { format!("({})", offset) };
+                    print!("{}={}", offset_str, value); 
                     *newline_end = false;
                 },
                 Command::Output { .. } => { 

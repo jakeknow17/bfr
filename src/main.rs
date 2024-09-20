@@ -32,9 +32,17 @@ struct Args {
     #[arg(short, long)]
     interp: bool,
 
-    /// Output .s assembly file
+    /// Output assembly file
     #[arg(short = 'S', long = "assembly")]
     output_asm: bool,
+
+    /// Output object file
+    #[arg(short = 'c', long = "object")]
+    output_object: bool,
+
+    /// Optimization level (0-3)
+    #[arg(short = 'O', default_value_t = 1)]
+    optimization_level: u8,
 }
 
 pub fn interp(commands: &mut [parser::Command]) {
@@ -53,11 +61,15 @@ pub fn interp(commands: &mut [parser::Command]) {
                 },
                 Command::IncData { offset, amount, ref mut count } => {
                     *count += 1;
-                    tape[pointer.saturating_add_signed(*offset)] = tape[pointer.saturating_add_signed(*offset)].wrapping_add(*amount);
+                    tape[pointer.saturating_add_signed(*offset)] = tape[pointer.wrapping_add_signed(*offset)].wrapping_add(*amount);
                 },
                 Command::DecData { offset, amount, ref mut count } => {
                     *count += 1;
-                    tape[pointer.saturating_add_signed(*offset)] = tape[pointer.saturating_add_signed(*offset)].wrapping_sub(*amount);
+                    tape[pointer.saturating_add_signed(*offset)] = tape[pointer.wrapping_add_signed(*offset)].wrapping_sub(*amount);
+                },
+                Command::SetData { offset, value, ref mut count } => {
+                    *count += 1;
+                    tape[pointer.saturating_add_signed(*offset)] = *value;
                 },
                 Command::Output { ref mut count } => {
                     *count += 1;
@@ -114,50 +126,56 @@ pub fn strip_directories_filepath(filepath: &str) -> &str {
     };
 }
 
-fn assemble_and_link_string(asm_string: &str, src_filepath: &str, dest_file: &str) {
-    let object_filepath = replace_extension_filepath(src_filepath, ".o");
-    let object_filepath = strip_directories_filepath(&object_filepath);
 
-    // Step 1: Spawn the `as` process, capturing its stdout
+fn assemble(asm_string: &str, object_filepath: &str) -> Result<(), String> {
     let mut as_process = std::process::Command::new("as")
         .arg("-o")
-        .arg(&object_filepath)
+        .arg(object_filepath)
         .stdin(std::process::Stdio::piped())
         .spawn()
-        .expect("Failed to spawn 'as' process");
+        .map_err(|_| "Error: `as` assembler not found. Please ensure it is installed on your system.".to_string())?;
 
     // Write the assembly code to the stdin of the `as` process
-    {
-        let stdin = as_process.stdin.as_mut().expect("Failed to open stdin");
-        stdin.write_all(asm_string.as_bytes()).expect("Failed to write to stdin");
+    if let Some(stdin) = as_process.stdin.as_mut() {
+        stdin
+            .write_all(asm_string.as_bytes())
+            .map_err(|_| "Error: Failed to write assembly code to assembler.".to_string())?;
+    } else {
+        return Err("Error: Failed to open stdin for the assembler.".to_string());
     }
 
-    // Wait for `as` to finish
     let as_status = as_process
         .wait()
-        .expect("Failed to wait on 'as' process");
+        .map_err(|_| "Error: Failed to wait for assembler process.".to_string())?;
 
     if !as_status.success() {
-        eprintln!("`as` failed with exit code: {:?}", as_status.code());
-        return;
+        return Err(format!("Error: Assembler failed with exit code: {:?}", as_status.code()));
     }
 
-    // Step 2: Spawn the `ld` process, using `as_output.stdout` as its input
-    let mut ld_process = std::process::Command::new("ld")
+    Ok(())
+}
+
+fn link(object_filepath: &str, dest_file: &str, keep_object: bool) -> Result<(), String> {
+    let ld_status = std::process::Command::new("ld")
         .arg("-o")
-        .arg(dest_file)        // The output binary to be linked
+        .arg(dest_file)
         .arg(object_filepath)
         .spawn()
-        .expect("Failed to spawn 'ld' process");
-
-    // Wait for `ld` to finish linking
-    let ld_status = ld_process
+        .map_err(|_| "Error: `ld` linker not found. Please ensure it is installed on your system.".to_string())?
         .wait()
-        .expect("Failed to wait on 'ld' process");
+        .map_err(|_| "Error: Failed to wait for linker process.".to_string())?;
 
     if !ld_status.success() {
-        eprintln!("`ld` failed with code: {:?}", ld_status.code());
+        return Err(format!("Error: Linker failed with exit code: {:?}", ld_status.code()));
     }
+
+    // Delete the object file unless `keep_object` flag is set
+    if !keep_object {
+        std::fs::remove_file(object_filepath)
+            .map_err(|_| format!("Warning: Failed to delete object file: {}", object_filepath))?;
+    }
+
+    Ok(())
 }
 
 fn append_assembly_header(out_string: &mut String) {
@@ -221,61 +239,62 @@ fn append_assembly_footer(out_string: &mut String) {
 "#);
 }
 
-fn compile(commands: &[parser::Command], src_filename: &str, dest_filename: &str, output_asm_file: bool) {
+fn compile(commands: &[parser::Command], src_filepath: &str, dest_filename: &str, output_asm_file: bool, output_object_file: bool) {
     use parser::Command;
+
+    fn append_pointer_op(out_string: &mut String, single_op: &str, multi_op: &str, amount: usize, reg: &str, comment: &str) {
+        if amount == 1 {
+            out_string.push_str(&format!("    {} {}            # {}\n", single_op, reg, comment));
+        } else {
+            out_string.push_str(&format!("{:24}# {}{}\n", format!("    {} ${}, {}", multi_op, amount, reg), comment, amount));
+        }
+    }
+
+    fn append_data_op(out_string: &mut String, offset: isize, amount: u8, single_op: &str, multi_op: &str, comment: &str) {
+        let offset_str = if offset == 0 { String::from("") } else { format!("{}", offset) };
+        out_string.push_str(&format!("{:24} # {}\n", format!("    movb {}(%r12), %al", offset_str), comment));
+
+        if amount == 1 {
+            out_string.push_str(&format!("    {} %al\n", single_op));
+        } else {
+            out_string.push_str(&format!("    {} ${}, %al\n", multi_op, amount));
+        }
+
+        out_string.push_str(&format!("    movb %al, {}(%r12)\n", offset_str));
+    }
+
+    fn append_io_syscall(out_string: &mut String, syscall_num: i32, fd: i32, comment: &str) {
+        out_string.push_str(&format!("    movq ${},   %rax      # {}\n", syscall_num, comment));
+        out_string.push_str(&format!("    movq ${},   %rdi\n", fd));
+        out_string.push_str("    movq %r12, %rsi\n");
+        out_string.push_str("    movq $1,   %rdx\n");
+        out_string.push_str("    syscall\n");
+    }
 
     fn compile_rec(out_string: &mut String, commands: &[parser::Command]) {
         for command in commands {
             match command {
                 Command::IncPointer { amount, .. } => {
-                    if *amount == 1 {
-                        out_string.push_str("    incq %r12            # >\n");
-                    } else {
-                        out_string.push_str(&format!("{:24}# >{}\n", format!("    addq ${}, %r12", amount), amount));
-                    }
+                    append_pointer_op(out_string, "incq", "addq", *amount, "%r12", ">");
                 },
                 Command::DecPointer { amount, .. } => {
-                    if *amount == 1 {
-                        out_string.push_str("    decq %r12            # <\n");
-                    } else {
-                        out_string.push_str(&format!("{:24} # <{}\n", format!("    subq ${}, %r12", amount), amount));
-                    }
+                    append_pointer_op(out_string, "decq", "subq", *amount, "%r12", "<");
                 },
                 Command::IncData { offset, amount, .. } => {
-                    let offset_str = if *offset == 0 { String::from("") } else { offset.to_string() };
-                    if *amount == 1 {
-                        out_string.push_str(&format!("{:24} # +\n", format!("    movb {}(%r12), %al", &offset_str)));
-                        out_string.push_str("    incb %al\n");
-                    } else {
-                        out_string.push_str(&format!("{:24} # +{}\n", format!("    movb {}(%r12), %al", &offset_str), amount));
-                        out_string.push_str(&format!("    addb ${}, %al\n", amount));
-                    }
-                    out_string.push_str(&format!("    movb %al, {}(%r12)\n", &offset_str));
+                    append_data_op(out_string, *offset, *amount, "incb", "addb", "+");
                 },
                 Command::DecData { offset, amount, .. } => {
-                    let offset_str = if *offset == 0 { String::from("") } else { offset.to_string() };
-                    if *amount == 1 {
-                        out_string.push_str(&format!("{:24} # +\n",format!("    movb {}(%r12), %al", &offset_str)));
-                        out_string.push_str("    decb %al\n");
-                    } else {
-                        out_string.push_str(&format!("{:24} # +{}\n", format!("    movb {}(%r12), %al", &offset_str), amount));
-                        out_string.push_str(&format!("    subb ${}, %al\n", amount));
-                    }
-                    out_string.push_str(&format!("    movb %al, {}(%r12)\n", &offset_str));
+                    append_data_op(out_string, *offset, *amount, "decb", "subb", "-");
+                },
+                Command::SetData { offset, value, .. } => {
+                    let offset_str = if *offset == 0 { String::from("") } else { format!("{}", offset) };
+                    out_string.push_str(&format!("{:24} # ={}\n", format!("    movb ${} {}(%r12)", value, offset_str), value));
                 },
                 Command::Output { .. } => {
-                    out_string.push_str("    movq $1,   %rax      # .\n");
-                    out_string.push_str("    movq $1,   %rdi\n");
-                    out_string.push_str("    movq %r12, %rsi\n");
-                    out_string.push_str("    movq $1,   %rdx\n");
-                    out_string.push_str("    syscall\n");
+                    append_io_syscall(out_string, 1, 1, ".");
                 }
                 Command::Input { .. } => {
-                    out_string.push_str("    movq $0,   %rax      # ,\n");
-                    out_string.push_str("    movq $0,   %rdi\n");
-                    out_string.push_str("    movq %r12, %rsi\n");
-                    out_string.push_str("    movq $1,   %rdx\n");
-                    out_string.push_str("    syscall\n");
+                    append_io_syscall(out_string, 0, 0, ",");
                 },
                 Command::Loop { body, id, .. } => {
                     out_string.push_str("    movb (%r12), %al     # [\n");
@@ -294,14 +313,14 @@ fn compile(commands: &[parser::Command], src_filename: &str, dest_filename: &str
         }
     }
 
+    // Build assembly file
     let mut asm = String::new();
     append_assembly_header(&mut asm);
     compile_rec(&mut asm, commands);
     append_assembly_footer(&mut asm);
 
     if output_asm_file {
-        println!("Outputting asm!");
-        let asm_filepath = replace_extension_filepath(src_filename, ".s");
+        let asm_filepath = replace_extension_filepath(src_filepath, ".s");
         let asm_filepath = strip_directories_filepath(&asm_filepath);
         let mut asm_file = std::fs::OpenOptions::new()
             .write(true)
@@ -312,7 +331,16 @@ fn compile(commands: &[parser::Command], src_filename: &str, dest_filename: &str
         asm_file.write_all(asm.as_bytes()).expect("Unable to write to assembly file");
     }
 
-    assemble_and_link_string(&asm, src_filename, dest_filename);
+    // Assemble and link output
+    let object_filepath = replace_extension_filepath(src_filepath, ".o");
+    let object_filepath = strip_directories_filepath(&object_filepath);
+    if let Err(e) = assemble(&asm, &object_filepath) {
+        eprintln!("{}", e);
+        return;
+    }
+    if let Err(e) = link(&object_filepath, dest_filename, output_object_file) {
+        eprintln!("{}", e);
+    }
 }
 
 fn main() {
@@ -329,7 +357,7 @@ fn main() {
     };
 
     let mut commands = parser::parse(&src_contents);
-    optimizer::optimize(&mut commands);
+    optimizer::optimize(&mut commands, args.optimization_level);
     if args.pretty_print {
         parser::pretty_print(&commands);
         return;
@@ -343,5 +371,5 @@ fn main() {
         return;
     }
 
-    compile(&commands, &args.file_name, &args.out_file, args.output_asm);
+    compile(&commands, &args.file_name, &args.out_file, args.output_asm, args.output_object);
 }

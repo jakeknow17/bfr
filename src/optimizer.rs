@@ -65,7 +65,7 @@ pub fn collapse(commands: &mut Vec<Command>) {
                 commands[write_idx] = Command::DecData { offset: *offset, amount: total_amount, count: 0 };
             }
             // Non-collapsible commands
-            Command::Output { .. } | Command::Input { .. } => {
+            Command::SetData { .. } | Command::Output { .. } | Command::Input { .. } => {
                 commands[write_idx] = current_command.clone();
             }
             Command::Loop { .. } => {
@@ -85,6 +85,8 @@ pub fn collapse(commands: &mut Vec<Command>) {
 }
 
 
-pub fn optimize(commands: &mut Vec<Command>) {
-    collapse(commands);
+pub fn optimize(commands: &mut Vec<Command>, optimization_level: u8) {
+    if optimization_level > 0 {
+        collapse(commands);
+    }
 }

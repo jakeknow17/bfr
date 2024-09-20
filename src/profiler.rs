@@ -11,6 +11,7 @@ fn is_simple_loop(loop_cmd: &Command) -> bool {
                 Command::DecPointer { .. } => loop_ptr -= 1,
                 Command::IncData { .. } => if loop_ptr == 0 { induction_delta += 1 },
                 Command::DecData { .. } => if loop_ptr == 0 { induction_delta -= 1 },
+                Command::SetData { .. } => if loop_ptr == 0 { return false },
                 Command::Output { .. } | Command::Input { .. } | Command::Loop { .. } => return false,
             }            
         }
@@ -66,6 +67,10 @@ pub fn print_profile(commands: &[Command]) {
                         format!("{}-{}", offset_str, amount) 
                     };
                     println!("{:>6} : {:^6} : {}", curr_idx, repr, count);
+                },
+                Command::SetData { offset, value, count } => { 
+                    let offset_str = if *offset == 0 { String::from("") } else { format!("({})", offset) };
+                    println!("{:>6} : {:^6} : {}", curr_idx, format!("{}={}", offset_str, value), count);
                 },
                 Command::Output { count } => { 
                     println!("{:>6} : {:^6} : {}", curr_idx, ".", count);
