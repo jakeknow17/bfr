@@ -9,11 +9,25 @@ fn is_simple_loop(loop_cmd: &Command) -> bool {
             match cmd {
                 Command::IncPointer { .. } => loop_ptr += 1,
                 Command::DecPointer { .. } => loop_ptr -= 1,
-                Command::IncData { .. } => if loop_ptr == 0 { induction_delta += 1 },
-                Command::DecData { .. } => if loop_ptr == 0 { induction_delta -= 1 },
-                Command::SetData { .. } => if loop_ptr == 0 { return false },
-                Command::Output { .. } | Command::Input { .. } | Command::Loop { .. } => return false,
-            }            
+                Command::IncData { .. } => {
+                    if loop_ptr == 0 {
+                        induction_delta += 1
+                    }
+                }
+                Command::DecData { .. } => {
+                    if loop_ptr == 0 {
+                        induction_delta -= 1
+                    }
+                }
+                Command::SetData { .. } => {
+                    if loop_ptr == 0 {
+                        return false;
+                    }
+                }
+                Command::Output { .. } | Command::Input { .. } | Command::Loop { .. } => {
+                    return false
+                }
+            }
         }
         if loop_ptr == 0 && (induction_delta == -1 || induction_delta == 1) {
             return true;
@@ -31,58 +45,103 @@ pub fn print_profile(commands: &[Command]) {
         num_executions: usize,
     }
 
-    fn print_profile_rec(commands: &[Command], curr_idx: &mut usize, simple_loops: &mut Vec<LoopData>, non_simple_loops: &mut Vec<LoopData>) {
+    fn print_profile_rec(
+        commands: &[Command],
+        curr_idx: &mut usize,
+        simple_loops: &mut Vec<LoopData>,
+        non_simple_loops: &mut Vec<LoopData>,
+    ) {
         for command in commands {
             match command {
-                Command::IncPointer { amount, count } => { 
+                Command::IncPointer { amount, count } => {
                     let repr = if *amount == 1 {
                         String::from(">")
                     } else {
                         format!(">{}", amount)
                     };
                     println!("{:>6} : {:^6} : {}", curr_idx, repr, count);
-                },
-                Command::DecPointer { amount, count } => { 
+                }
+                Command::DecPointer { amount, count } => {
                     let repr = if *amount == 1 {
                         String::from("<")
                     } else {
                         format!("<{}", amount)
                     };
                     println!("{:>6} : {:^6} : {}", curr_idx, repr, count);
-                },
-                Command::IncData { offset, amount, count } => { 
-                    let offset_str = if *offset == 0 { String::from("") } else { format!("({})", offset) };
-                    let repr = if *amount == 1 {
-                        format!("{}+", offset_str) 
+                }
+                Command::IncData {
+                    offset,
+                    amount,
+                    count,
+                } => {
+                    let offset_str = if *offset == 0 {
+                        String::from("")
                     } else {
-                        format!("{}+{}", offset_str, amount) 
+                        format!("({})", offset)
+                    };
+                    let repr = if *amount == 1 {
+                        format!("{}+", offset_str)
+                    } else {
+                        format!("{}+{}", offset_str, amount)
                     };
                     println!("{:>6} : {:^6} : {}", curr_idx, repr, count);
-                },
-                Command::DecData { offset, amount, count } => { 
-                    let offset_str = if *offset == 0 { String::from("") } else { format!("({})", offset) };
-                    let repr = if *amount == 1 {
-                        format!("{}-", offset_str) 
+                }
+                Command::DecData {
+                    offset,
+                    amount,
+                    count,
+                } => {
+                    let offset_str = if *offset == 0 {
+                        String::from("")
                     } else {
-                        format!("{}-{}", offset_str, amount) 
+                        format!("({})", offset)
+                    };
+                    let repr = if *amount == 1 {
+                        format!("{}-", offset_str)
+                    } else {
+                        format!("{}-{}", offset_str, amount)
                     };
                     println!("{:>6} : {:^6} : {}", curr_idx, repr, count);
-                },
-                Command::SetData { offset, value, count } => { 
-                    let offset_str = if *offset == 0 { String::from("") } else { format!("({})", offset) };
-                    println!("{:>6} : {:^6} : {}", curr_idx, format!("{}={}", offset_str, value), count);
-                },
-                Command::Output { count } => { 
+                }
+                Command::SetData {
+                    offset,
+                    value,
+                    count,
+                } => {
+                    let offset_str = if *offset == 0 {
+                        String::from("")
+                    } else {
+                        format!("({})", offset)
+                    };
+                    println!(
+                        "{:>6} : {:^6} : {}",
+                        curr_idx,
+                        format!("{}={}", offset_str, value),
+                        count
+                    );
+                }
+                Command::Output { count } => {
                     println!("{:>6} : {:^6} : {}", curr_idx, ".", count);
-                },
-                Command::Input { count } => { 
+                }
+                Command::Input { count } => {
                     println!("{:>6} : {:^6} : {}", curr_idx, ",", count);
-                },
-                Command::Loop { body, id: _, start_count, end_count } => {
+                }
+                Command::Loop {
+                    body,
+                    id: _,
+                    start_count,
+                    end_count,
+                } => {
                     if is_simple_loop(command) {
-                        simple_loops.push(LoopData { idx: *curr_idx, num_executions: *end_count });
+                        simple_loops.push(LoopData {
+                            idx: *curr_idx,
+                            num_executions: *end_count,
+                        });
                     } else {
-                        non_simple_loops.push(LoopData { idx: *curr_idx, num_executions: *end_count });
+                        non_simple_loops.push(LoopData {
+                            idx: *curr_idx,
+                            num_executions: *end_count,
+                        });
                     }
 
                     println!("{:>6} : {:^6} : {}", curr_idx, "[", start_count);
@@ -92,7 +151,7 @@ pub fn print_profile(commands: &[Command]) {
                     print_profile_rec(body, curr_idx, simple_loops, non_simple_loops);
 
                     println!("{:>6} : {:^6} : {}", curr_idx, "]", end_count);
-                },
+                }
             }
             *curr_idx += 1;
         }
@@ -102,15 +161,26 @@ pub fn print_profile(commands: &[Command]) {
     let mut init_index = 0;
     let mut simple_loops: Vec<LoopData> = vec![];
     let mut non_simple_loops: Vec<LoopData> = vec![];
-    print_profile_rec(&commands, &mut init_index, &mut simple_loops, &mut non_simple_loops);
+    print_profile_rec(
+        &commands,
+        &mut init_index,
+        &mut simple_loops,
+        &mut non_simple_loops,
+    );
 
     simple_loops.sort_by(|a, b| b.num_executions.cmp(&a.num_executions));
     non_simple_loops.sort_by(|a, b| b.num_executions.cmp(&a.num_executions));
 
     for simple_loop in simple_loops {
-        println!("[Simple Loop]     : index {:<6} : executions {}", simple_loop.idx, simple_loop.num_executions);
+        println!(
+            "[Simple Loop]     : index {:<6} : executions {}",
+            simple_loop.idx, simple_loop.num_executions
+        );
     }
     for non_simple_loop in non_simple_loops {
-        println!("[Non-simple Loop] : index {:<6} : executions {}", non_simple_loop.idx, non_simple_loop.num_executions);
+        println!(
+            "[Non-simple Loop] : index {:<6} : executions {}",
+            non_simple_loop.idx, non_simple_loop.num_executions
+        );
     }
 }
