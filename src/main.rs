@@ -197,8 +197,8 @@ _start:
 
 main:
     pushq %rbp
-    pushq %r12
     movq  %rsp, %rbp
+    pushq %r12
 
     # Allocate memory using mmap
     movq $9,        %rax  # Mmap system call number
@@ -212,10 +212,12 @@ main:
 
     # TODO: Check if mmap failed
 
-    movq %rax,      %r12 # Move tape address into callee saved register
-    addq $0x100000, %r12 # Move the pointer to the middle of the tape
+    pushq %rax            # Save tape address to the stack
+    movq  %rax,      %r12 # Move tape address into callee saved register
+    addq  $0x100000, %r12 # Move the pointer to the middle of the tape
 
-    # Begin program code"#);
+    # Begin program code
+"#);
 }
 
 fn append_assembly_footer(out_string: &mut String) {
@@ -230,7 +232,7 @@ fn append_assembly_footer(out_string: &mut String) {
 
     # TODO: Check if munmap failed
 
-    movq %rbp, %rsp
+    popq %rax
     popq %r12
     popq %rbp
 
@@ -288,7 +290,7 @@ fn compile(commands: &[parser::Command], src_filepath: &str, dest_filename: &str
                 },
                 Command::SetData { offset, value, .. } => {
                     let offset_str = if *offset == 0 { String::from("") } else { format!("{}", offset) };
-                    out_string.push_str(&format!("{:24} # ={}\n", format!("    movb ${} {}(%r12)", value, offset_str), value));
+                    out_string.push_str(&format!("{:24} # ={}\n", format!("    movb ${}, {}(%r12)", value, offset_str), value));
                 },
                 Command::Output { .. } => {
                     append_io_syscall(out_string, 1, 1, ".");

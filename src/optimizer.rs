@@ -84,9 +84,38 @@ pub fn collapse(commands: &mut Vec<Command>) {
     commands.truncate(write_idx);
 }
 
+fn fold_zero_loop(commands: &mut Vec<Command>) {
+    for i in 0..commands.len() {
+        let current_command = &mut commands[i];
+
+        match current_command {
+            Command::Loop { ref mut body, .. } => {
+                if body.len() != 1 {
+                    fold_zero_loop(body);
+                    continue;
+                }
+                if let Command::DecData { offset, amount, .. } = &body[0] {
+                    // Even amount can cause infinite loop
+                    if *offset != 0 || *amount % 2 == 0 { continue; }
+                    commands[i] = Command::SetData { offset: 0, value: 0, count: 0 };
+                } else if let Command::IncData { offset, amount, .. } = &body[0] {
+                    if *offset != 0 || *amount % 2 == 0 { continue; }
+                    commands[i] = Command::SetData { offset: 0, value: 0, count: 0 };
+                } else {
+                    fold_zero_loop(body);
+                }
+            }
+            _ => ()
+        }
+    }
+}
+
 
 pub fn optimize(commands: &mut Vec<Command>, optimization_level: u8) {
     if optimization_level > 0 {
         collapse(commands);
+    }
+    if optimization_level > 1 {
+        fold_zero_loop(commands);
     }
 }
