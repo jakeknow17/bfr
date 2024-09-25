@@ -1,4 +1,10 @@
 #[derive(Debug, Clone)]
+pub struct ScaledOffset {
+    pub dst_offset: isize,
+    pub multiplier: usize,
+}
+
+#[derive(Debug, Clone)]
 pub enum Command {
     IncPointer {
         amount: usize,
@@ -21,6 +27,16 @@ pub enum Command {
     SetData {
         offset: isize,
         value: u8,
+        count: usize,
+    },
+    AddOffsetData {
+        src_offset: isize,
+        dest_list: Vec<ScaledOffset>,
+        count: usize,
+    },
+    SubOffsetData {
+        src_offset: isize,
+        dest_list: Vec<ScaledOffset>,
         count: usize,
     },
     Output {
@@ -175,6 +191,32 @@ pub fn pretty_print(commands: &[Command]) {
                     };
                     print!("{}={}", offset_str, value);
                     *newline_end = false;
+                }
+                Command::AddOffsetData {
+                    src_offset,
+                    dest_list,
+                    ..
+                } => {
+                    let mut dest_string = String::new();
+                    for dest in dest_list {
+                        dest_string
+                            .push_str(&format!("({}*{})*", dest.dst_offset, dest.multiplier));
+                    }
+                    dest_string.pop();
+                    print!("({}+={})", src_offset, dest_string);
+                }
+                Command::SubOffsetData {
+                    src_offset,
+                    dest_list,
+                    ..
+                } => {
+                    let mut dest_string = String::new();
+                    for dest in dest_list {
+                        dest_string
+                            .push_str(&format!("({}*{})*", dest.dst_offset, dest.multiplier));
+                    }
+                    dest_string.pop();
+                    print!("({}-={})", src_offset, dest_string);
                 }
                 Command::Output { .. } => {
                     print!(".");

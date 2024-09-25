@@ -97,7 +97,11 @@ pub fn collapse(commands: &mut Vec<Command>) {
                 };
             }
             // Non-collapsible commands
-            Command::SetData { .. } | Command::Output { .. } | Command::Input { .. } => {
+            Command::SetData { .. }
+            | Command::Output { .. }
+            | Command::Input { .. }
+            | Command::AddOffsetData { .. }
+            | Command::SubOffsetData { .. } => {
                 commands[write_idx] = current_command.clone();
             }
             Command::Loop { .. } => {

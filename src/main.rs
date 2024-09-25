@@ -76,7 +76,7 @@ pub fn interp(commands: &mut [parser::Command]) {
                     ref mut count,
                 } => {
                     *count += 1;
-                    tape[pointer.saturating_add_signed(*offset)] =
+                    tape[pointer.wrapping_add_signed(*offset)] =
                         tape[pointer.wrapping_add_signed(*offset)].wrapping_add(*amount);
                 }
                 Command::DecData {
@@ -85,7 +85,7 @@ pub fn interp(commands: &mut [parser::Command]) {
                     ref mut count,
                 } => {
                     *count += 1;
-                    tape[pointer.saturating_add_signed(*offset)] =
+                    tape[pointer.wrapping_add_signed(*offset)] =
                         tape[pointer.wrapping_add_signed(*offset)].wrapping_sub(*amount);
                 }
                 Command::SetData {
@@ -94,7 +94,37 @@ pub fn interp(commands: &mut [parser::Command]) {
                     ref mut count,
                 } => {
                     *count += 1;
-                    tape[pointer.saturating_add_signed(*offset)] = *value;
+                    tape[pointer.wrapping_add_signed(*offset)] = *value;
+                }
+                Command::AddOffsetData {
+                    src_offset,
+                    dest_list,
+                    ref mut count
+                } => {
+                    *count += 1;
+                    let mut total: u8 = 1;
+                    for dest in dest_list {
+                        let tmp = (tape[pointer.wrapping_add_signed(dest.dst_offset)] as usize)
+                            .wrapping_mul(dest.multiplier) as u8;
+                        total = total.wrapping_mul(tmp);
+                    }
+                    tape[pointer.wrapping_add_signed(*src_offset)] =
+                        tape[pointer.wrapping_add_signed(*src_offset)].wrapping_add(total);
+                }
+                Command::SubOffsetData {
+                    src_offset,
+                    dest_list,
+                    ref mut count
+                } => {
+                    *count += 1;
+                    let mut total: u8 = 1;
+                    for dest in dest_list {
+                        let tmp = (tape[pointer.wrapping_add_signed(dest.dst_offset)] as usize)
+                            .wrapping_mul(dest.multiplier) as u8;
+                        total = total.wrapping_mul(tmp);
+                    }
+                    tape[pointer.wrapping_add_signed(*src_offset)] =
+                        tape[pointer.wrapping_add_signed(*src_offset)].wrapping_sub(total);
                 }
                 Command::Output { ref mut count } => {
                     *count += 1;
@@ -378,6 +408,27 @@ fn compile(
                         value
                     ));
                 }
+                Command::AddOffsetData {
+                    src_offset,
+                    dest_list,
+                    ..
+                } => todo!(),
+                //{
+                //    *count += 1;
+                //    let mut total: u8 = 1;
+                //    for dest in dest_list {
+                //        total = total
+                //            .wrapping_mul(tape[pointer.wrapping_add_signed(*dest.dst_offset)])
+                //            .wrapping_mul(dest.multiplier);
+                //    }
+                //    tape[pointer.wrapping_add_signed(*src_offset)] =
+                //        tape[pointer.wrapping_add_signed(*src_offset)].wrapping_add(*total);
+                //}
+                Command::SubOffsetData {
+                    src_offset,
+                    dest_list,
+                    ..
+                } => todo!(),
                 Command::Output { .. } => {
                     append_io_syscall(out_string, 1, 1, ".");
                 }

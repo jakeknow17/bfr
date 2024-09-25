@@ -27,6 +27,16 @@ fn is_simple_loop(loop_cmd: &Command) -> bool {
                 Command::Output { .. } | Command::Input { .. } | Command::Loop { .. } => {
                     return false
                 }
+                Command::AddOffsetData {
+                    src_offset,
+                    dest_list,
+                    ..
+                } => {}
+                Command::SubOffsetData {
+                    src_offset,
+                    dest_list,
+                    ..
+                } => {}
             }
         }
         if loop_ptr == 0 && (induction_delta == -1 || induction_delta == 1) {
@@ -117,6 +127,42 @@ pub fn print_profile(commands: &[Command]) {
                         "{:>6} : {:^6} : {}",
                         curr_idx,
                         format!("{}={}", offset_str, value),
+                        count
+                    );
+                }
+                Command::AddOffsetData {
+                    src_offset,
+                    dest_list,
+                    count
+                } => {
+                    let mut dest_string = String::new();
+                    for dest in dest_list {
+                        dest_string
+                            .push_str(&format!("({}*{})*", dest.dst_offset, dest.multiplier));
+                    }
+                    dest_string.pop();
+                    println!(
+                        "{:>6} : {:^6} : {}",
+                        curr_idx,
+                        format!("({}+={})", src_offset, dest_string),
+                        count
+                    );
+                }
+                Command::SubOffsetData {
+                    src_offset,
+                    dest_list,
+                    count
+                } => {
+                    let mut dest_string = String::new();
+                    for dest in dest_list {
+                        dest_string
+                            .push_str(&format!("({}*{})*", dest.dst_offset, dest.multiplier));
+                    }
+                    dest_string.pop();
+                    println!(
+                        "{:>6} : {:^6} : {}",
+                        curr_idx,
+                        format!("({}-={})", src_offset, dest_string),
                         count
                     );
                 }
