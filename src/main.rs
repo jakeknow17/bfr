@@ -96,14 +96,20 @@ pub fn interp(commands: &mut [parser::Command]) {
                     *count += 1;
                     tape[pointer.saturating_add_signed(*offset)] = *value;
                 }
-                Command::Output { ref mut count } => {
+                Command::Output {
+                    id: _,
+                    ref mut count,
+                } => {
                     *count += 1;
                     match char::from_u32(u32::from(tape[*pointer])) {
                         Some(c) => print!("{}", c),
                         None => {}
                     }
                 }
-                Command::Input { ref mut count } => {
+                Command::Input {
+                    id: _,
+                    ref mut count,
+                } => {
                     use std::io::Read;
 
                     *count += 1;
@@ -337,7 +343,13 @@ fn compile(
         out_string.push('\n');
     }
 
-    fn append_io_syscall(out_string: &mut String, syscall_num: i32, fd: i32, comment: &str) {
+    fn append_io_syscall(
+        out_string: &mut String,
+        syscall_num: i32,
+        fd: i32,
+        id: usize,
+        comment: &str,
+    ) {
         out_string.push_str(&format!(
             r#"    # {}
     movq ${}, %rax
@@ -345,10 +357,22 @@ fn compile(
     movq %r12, %rsi
     movq $1, %rdx
     syscall
-
 "#,
             comment, syscall_num, fd
         ));
+
+        // Read
+        if syscall_num == 0 {
+            out_string.push_str(&format!(
+                r#"    testq %rax, %rax
+    jnz   read_nonzero{}
+    movb  $-1, (%r12)
+    read_nonzero{}:
+"#,
+                id, id
+            ));
+        }
+        out_string.push('\n');
     }
 
     fn compile_rec(out_string: &mut String, commands: &[parser::Command]) {
@@ -378,11 +402,11 @@ fn compile(
                         value
                     ));
                 }
-                Command::Output { .. } => {
-                    append_io_syscall(out_string, 1, 1, ".");
+                Command::Output { id, .. } => {
+                    append_io_syscall(out_string, 1, 1, *id, ".");
                 }
-                Command::Input { .. } => {
-                    append_io_syscall(out_string, 0, 0, ",");
+                Command::Input { id, .. } => {
+                    append_io_syscall(out_string, 0, 0, *id, ",");
                 }
                 Command::Loop { body, id, .. } => {
                     out_string.push_str("    # [\n");

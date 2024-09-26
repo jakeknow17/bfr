@@ -24,14 +24,16 @@ pub enum Command {
         count: usize,
     },
     Output {
+        id: usize,
         count: usize,
     },
     Input {
+        id: usize,
         count: usize,
     },
     Loop {
-        body: Vec<Command>,
         id: usize,
+        body: Vec<Command>,
         start_count: usize,
         end_count: usize,
     },
@@ -41,6 +43,7 @@ pub fn parse(src: &String) -> Vec<Command> {
     let mut commands: Vec<Command> = vec![];
     let mut stack: Vec<Vec<Command>> = vec![];
     let mut loop_id: usize = 0;
+    let mut io_id: usize = 0;
 
     for c in src.chars() {
         let op = match c {
@@ -62,8 +65,20 @@ pub fn parse(src: &String) -> Vec<Command> {
                 amount: 1,
                 count: 0,
             }),
-            '.' => Some(Command::Output { count: 0 }),
-            ',' => Some(Command::Input { count: 0 }),
+            '.' => {
+                io_id += 1;
+                Some(Command::Output {
+                    id: io_id,
+                    count: 0,
+                })
+            }
+            ',' => {
+                io_id += 1;
+                Some(Command::Input {
+                    id: io_id,
+                    count: 0,
+                })
+            }
             '[' => {
                 stack.push(vec![]);
                 None

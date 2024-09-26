@@ -120,10 +120,10 @@ pub fn print_profile(commands: &[Command]) {
                         count
                     );
                 }
-                Command::Output { count } => {
+                Command::Output { id: _, count } => {
                     println!("{:>6} : {:^6} : {}", curr_idx, ".", count);
                 }
-                Command::Input { count } => {
+                Command::Input { id: _, count } => {
                     println!("{:>6} : {:^6} : {}", curr_idx, ",", count);
                 }
                 Command::Loop {
