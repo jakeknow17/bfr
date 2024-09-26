@@ -53,7 +53,7 @@ pub fn interp(commands: &mut [parser::Command]) {
         tape: &mut [u8],
         pointer: &mut usize,
         pc: &mut usize,
-    ) {
+    ) -> std::io::Result<()> {
         while *pc < commands.len() {
             match &mut commands[*pc] {
                 Command::IncPointer {
@@ -131,10 +131,8 @@ pub fn interp(commands: &mut [parser::Command]) {
                     ref mut count,
                 } => {
                     *count += 1;
-                    match char::from_u32(u32::from(tape[*pointer])) {
-                        Some(c) => print!("{}", c),
-                        None => {}
-                    }
+                    let buf = vec![tape[*pointer]];
+                    std::io::stdout().write_all(&buf)?;
                 }
                 Command::Input {
                     id: _,
@@ -144,10 +142,11 @@ pub fn interp(commands: &mut [parser::Command]) {
 
                     *count += 1;
                     let mut input_buf: [u8; 1] = [0; 1];
-                    std::io::stdin()
-                        .read_exact(&mut input_buf)
-                        .expect("Failed to read input");
-                    tape[*pointer] = input_buf[0];
+                    if let Err(..) = std::io::stdin().read_exact(&mut input_buf) {
+                        tape[*pointer] = 255; // -1
+                    } else {
+                        tape[*pointer] = input_buf[0];
+                    }
                 }
                 Command::Loop {
                     body,
@@ -158,7 +157,9 @@ pub fn interp(commands: &mut [parser::Command]) {
                     *start_count += 1;
                     while tape[*pointer] != 0 {
                         let mut loop_pc = 0;
-                        interp_rec(body, tape, pointer, &mut loop_pc);
+                        if let Err(e) = interp_rec(body, tape, pointer, &mut loop_pc) {
+                            eprintln!("{}", e);
+                        }
 
                         *end_count += 1;
                         if tape[*pointer] == 0 {
@@ -171,11 +172,14 @@ pub fn interp(commands: &mut [parser::Command]) {
             }
             *pc += 1;
         }
+        Ok(())
     }
     let mut tape: Vec<u8> = vec![0; INIT_TAPE_SIZE];
     let mut pointer = INIT_POINTER_LOC;
     let mut pc = 0;
-    interp_rec(commands, &mut tape, &mut pointer, &mut pc);
+    if let Err(e) = interp_rec(commands, &mut tape, &mut pointer, &mut pc) {
+        eprintln!("{}", e);
+    };
 }
 
 pub fn replace_extension_filepath(filepath: &str, ext: &str) -> String {
