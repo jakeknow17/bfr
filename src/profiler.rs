@@ -133,7 +133,7 @@ pub fn print_profile(commands: &[Command]) {
                 Command::AddOffsetData {
                     src_offset,
                     dest_list,
-                    count
+                    count,
                 } => {
                     let mut dest_string = String::new();
                     for dest in dest_list {
@@ -151,7 +151,7 @@ pub fn print_profile(commands: &[Command]) {
                 Command::SubOffsetData {
                     src_offset,
                     dest_list,
-                    count
+                    count,
                 } => {
                     let mut dest_string = String::new();
                     for dest in dest_list {
@@ -166,10 +166,10 @@ pub fn print_profile(commands: &[Command]) {
                         count
                     );
                 }
-                Command::Output { count } => {
+                Command::Output { id: _, count } => {
                     println!("{:>6} : {:^6} : {}", curr_idx, ".", count);
                 }
-                Command::Input { count } => {
+                Command::Input { id: _, count } => {
                     println!("{:>6} : {:^6} : {}", curr_idx, ",", count);
                 }
                 Command::Loop {

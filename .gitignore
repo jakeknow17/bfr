@@ -1,6 +1,8 @@
 /target
 /benches
 /build
+/bfcheck
+/bftest
 *.s
 *.o
 a.out
