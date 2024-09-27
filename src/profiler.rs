@@ -1,53 +1,5 @@
+use crate::optimizer::is_simple_loop;
 use crate::parser::Command;
-
-fn is_simple_loop(loop_cmd: &Command) -> bool {
-    if let Command::Loop { body, .. } = loop_cmd {
-        let mut loop_ptr = 0;
-        let mut induction_delta = 0;
-
-        for cmd in body {
-            match cmd {
-                Command::IncPointer { .. } => loop_ptr += 1,
-                Command::DecPointer { .. } => loop_ptr -= 1,
-                Command::IncData { .. } => {
-                    if loop_ptr == 0 {
-                        induction_delta += 1
-                    }
-                }
-                Command::DecData { .. } => {
-                    if loop_ptr == 0 {
-                        induction_delta -= 1
-                    }
-                }
-                Command::SetData { .. } => {
-                    if loop_ptr == 0 {
-                        return false;
-                    }
-                }
-                Command::Output { .. } | Command::Input { .. } | Command::Loop { .. } => {
-                    return false
-                }
-                Command::AddOffsetData {
-                    src_offset,
-                    dest_list,
-                    ..
-                } => {}
-                Command::SubOffsetData {
-                    src_offset,
-                    dest_list,
-                    ..
-                } => {}
-            }
-        }
-        if loop_ptr == 0 && (induction_delta == -1 || induction_delta == 1) {
-            return true;
-        } else {
-            return false;
-        }
-    } else {
-        return false;
-    }
-}
 
 pub fn print_profile(commands: &[Command]) {
     struct LoopData {
@@ -131,38 +83,38 @@ pub fn print_profile(commands: &[Command]) {
                     );
                 }
                 Command::AddOffsetData {
+                    dest_offset,
                     src_offset,
-                    dest_list,
+                    multiplier,
+                    inverted,
                     count,
                 } => {
                     let mut dest_string = String::new();
-                    for dest in dest_list {
-                        dest_string
-                            .push_str(&format!("({}*{})*", dest.dst_offset, dest.multiplier));
-                    }
-                    dest_string.pop();
+                    let inverted_str = if *inverted { "-" } else { "" };
+                    dest_string
+                        .push_str(&format!("{}({}*{})", inverted_str, src_offset, multiplier));
                     println!(
                         "{:>6} : {:^6} : {}",
                         curr_idx,
-                        format!("({}+={})", src_offset, dest_string),
+                        format!("({}+={})", dest_offset, dest_string),
                         count
                     );
                 }
                 Command::SubOffsetData {
+                    dest_offset,
                     src_offset,
-                    dest_list,
+                    multiplier,
+                    inverted,
                     count,
                 } => {
                     let mut dest_string = String::new();
-                    for dest in dest_list {
-                        dest_string
-                            .push_str(&format!("({}*{})*", dest.dst_offset, dest.multiplier));
-                    }
-                    dest_string.pop();
+                    let inverted_str = if *inverted { "-" } else { "" };
+                    dest_string
+                        .push_str(&format!("{}({}*{})", inverted_str, src_offset, multiplier));
                     println!(
                         "{:>6} : {:^6} : {}",
                         curr_idx,
-                        format!("({}-={})", src_offset, dest_string),
+                        format!("({}-={})", dest_offset, dest_string),
                         count
                     );
                 }
@@ -178,7 +130,8 @@ pub fn print_profile(commands: &[Command]) {
                     start_count,
                     end_count,
                 } => {
-                    if is_simple_loop(command) {
+                    let (is_simple, _) = is_simple_loop(command);
+                    if is_simple {
                         simple_loops.push(LoopData {
                             idx: *curr_idx,
                             num_executions: *end_count,

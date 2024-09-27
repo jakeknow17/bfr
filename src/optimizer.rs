@@ -1,5 +1,37 @@
 use crate::parser::Command;
 
+pub fn is_simple_loop(loop_cmd: &Command) -> (bool, isize) {
+    if let Command::Loop { body, .. } = loop_cmd {
+        let mut loop_ptr: isize = 0;
+        let mut induction_delta: isize = 0;
+
+        for cmd in body {
+            match cmd {
+                Command::IncPointer { amount, .. } => loop_ptr += *amount as isize,
+                Command::DecPointer { amount, .. } => loop_ptr -= *amount as isize,
+                Command::IncData { offset, amount, .. } => {
+                    if loop_ptr.wrapping_add(*offset) == 0 {
+                        induction_delta += *amount as isize
+                    }
+                }
+                Command::DecData { offset, amount, .. } => {
+                    if loop_ptr.wrapping_add(*offset) == 0 {
+                        induction_delta -= *amount as isize
+                    }
+                }
+                _ => return (false, 0),
+            }
+        }
+        if loop_ptr == 0 && (induction_delta == -1 || induction_delta == 1) {
+            return (true, induction_delta);
+        } else {
+            return (false, 0);
+        }
+    } else {
+        return (false, 0);
+    }
+}
+
 pub fn collapse(commands: &mut Vec<Command>) {
     let mut read_idx = 0;
     let mut write_idx = 0;
@@ -166,11 +198,73 @@ fn fold_zero_loop(commands: &mut Vec<Command>) {
     }
 }
 
+fn replace_simple_loops(commands: &mut Vec<Command>) {
+    let mut i = 0;
+    while i < commands.len() {
+        let current_command = &mut commands[i];
+
+        let (is_simple, induction_delta) = is_simple_loop(current_command);
+        match current_command {
+            Command::Loop { ref mut body, .. } => {
+                if !is_simple {
+                    i += 1;
+                    replace_simple_loops(body);
+                    continue;
+                }
+                let mut new_cmds: Vec<Command> = vec![];
+                let mut loop_ptr: isize = 0;
+                for cmd in body {
+                    match cmd {
+                        Command::IncPointer { amount, .. } => loop_ptr += *amount as isize,
+                        Command::DecPointer { amount, .. } => loop_ptr -= *amount as isize,
+                        Command::IncData { offset, amount, .. } => {
+                            if loop_ptr.wrapping_add(*offset) != 0 {
+                                let new_cmd = Command::AddOffsetData {
+                                    dest_offset: loop_ptr + *offset,
+                                    src_offset: 0,
+                                    multiplier: *amount as usize,
+                                    inverted: induction_delta == 1,
+                                    count: 0,
+                                };
+                                new_cmds.push(new_cmd);
+                            }
+                        }
+                        Command::DecData { offset, amount, .. } => {
+                            if loop_ptr.wrapping_add(*offset) != 0 {
+                                let new_cmd = Command::SubOffsetData {
+                                    dest_offset: loop_ptr + *offset,
+                                    src_offset: 0,
+                                    multiplier: *amount as usize,
+                                    inverted: induction_delta == 1,
+                                    count: 0,
+                                };
+                                new_cmds.push(new_cmd);
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+                new_cmds.push(Command::SetData {
+                    offset: 0,
+                    value: 0,
+                    count: 0,
+                });
+                commands.splice(i..i + 1, new_cmds);
+            }
+            _ => (),
+        }
+        i += 1;
+    }
+}
+
 pub fn optimize(commands: &mut Vec<Command>, optimization_level: u8) {
     if optimization_level > 0 {
         collapse(commands);
     }
     if optimization_level > 1 {
         fold_zero_loop(commands);
+    }
+    if optimization_level > 2 {
+        replace_simple_loops(commands);
     }
 }

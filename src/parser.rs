@@ -1,10 +1,4 @@
 #[derive(Debug, Clone)]
-pub struct ScaledOffset {
-    pub dst_offset: isize,
-    pub multiplier: usize,
-}
-
-#[derive(Debug, Clone)]
 pub enum Command {
     IncPointer {
         amount: usize,
@@ -30,13 +24,17 @@ pub enum Command {
         count: usize,
     },
     AddOffsetData {
+        dest_offset: isize,
         src_offset: isize,
-        dest_list: Vec<ScaledOffset>,
+        multiplier: usize,
+        inverted: bool,
         count: usize,
     },
     SubOffsetData {
+        dest_offset: isize,
         src_offset: isize,
-        dest_list: Vec<ScaledOffset>,
+        multiplier: usize,
+        inverted: bool,
         count: usize,
     },
     Output {
@@ -208,30 +206,30 @@ pub fn pretty_print(commands: &[Command]) {
                     *newline_end = false;
                 }
                 Command::AddOffsetData {
+                    dest_offset,
                     src_offset,
-                    dest_list,
+                    multiplier,
+                    inverted,
                     ..
                 } => {
                     let mut dest_string = String::new();
-                    for dest in dest_list {
-                        dest_string
-                            .push_str(&format!("({}*{})*", dest.dst_offset, dest.multiplier));
-                    }
-                    dest_string.pop();
-                    print!("({}+={})", src_offset, dest_string);
+                    let inverted_str = if *inverted { "-" } else { "" };
+                    dest_string
+                        .push_str(&format!("{}({}*{})", inverted_str, src_offset, multiplier));
+                    print!("({}+={})", dest_offset, dest_string);
                 }
                 Command::SubOffsetData {
+                    dest_offset,
                     src_offset,
-                    dest_list,
+                    multiplier,
+                    inverted,
                     ..
                 } => {
                     let mut dest_string = String::new();
-                    for dest in dest_list {
-                        dest_string
-                            .push_str(&format!("({}*{})*", dest.dst_offset, dest.multiplier));
-                    }
-                    dest_string.pop();
-                    print!("({}-={})", src_offset, dest_string);
+                    let inverted_str = if *inverted { "-" } else { "" };
+                    dest_string
+                        .push_str(&format!("{}({}*{})", inverted_str, src_offset, multiplier));
+                    print!("({}-={})", dest_offset, dest_string);
                 }
                 Command::Output { .. } => {
                     print!(".");

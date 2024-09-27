@@ -97,34 +97,38 @@ pub fn interp(commands: &mut [parser::Command]) {
                     tape[pointer.wrapping_add_signed(*offset)] = *value;
                 }
                 Command::AddOffsetData {
+                    dest_offset,
                     src_offset,
-                    dest_list,
+                    multiplier,
+                    inverted,
                     ref mut count,
                 } => {
                     *count += 1;
-                    let mut total: u8 = 1;
-                    for dest in dest_list {
-                        let tmp = (tape[pointer.wrapping_add_signed(dest.dst_offset)] as usize)
-                            .wrapping_mul(dest.multiplier) as u8;
-                        total = total.wrapping_mul(tmp);
-                    }
-                    tape[pointer.wrapping_add_signed(*src_offset)] =
-                        tape[pointer.wrapping_add_signed(*src_offset)].wrapping_add(total);
+                    let mut src_val = if *inverted {
+                        0u8.wrapping_sub(tape[pointer.wrapping_add_signed(*src_offset)]) as usize
+                    } else {
+                        tape[pointer.wrapping_add_signed(*src_offset)] as usize
+                    };
+                    src_val = src_val.wrapping_mul(*multiplier) % 256;
+                    tape[pointer.wrapping_add_signed(*dest_offset)] =
+                        tape[pointer.wrapping_add_signed(*dest_offset)].wrapping_add(src_val as u8);
                 }
                 Command::SubOffsetData {
+                    dest_offset,
                     src_offset,
-                    dest_list,
+                    multiplier,
+                    inverted,
                     ref mut count,
                 } => {
                     *count += 1;
-                    let mut total: u8 = 1;
-                    for dest in dest_list {
-                        let tmp = (tape[pointer.wrapping_add_signed(dest.dst_offset)] as usize)
-                            .wrapping_mul(dest.multiplier) as u8;
-                        total = total.wrapping_mul(tmp);
-                    }
-                    tape[pointer.wrapping_add_signed(*src_offset)] =
-                        tape[pointer.wrapping_add_signed(*src_offset)].wrapping_sub(total);
+                    let mut src_val = if *inverted {
+                        0u8.wrapping_sub(tape[pointer.wrapping_add_signed(*src_offset)]) as usize
+                    } else {
+                        tape[pointer.wrapping_add_signed(*src_offset)] as usize
+                    };
+                    src_val = src_val.wrapping_mul(*multiplier) % 256;
+                    tape[pointer.wrapping_add_signed(*dest_offset)] =
+                        tape[pointer.wrapping_add_signed(*dest_offset)].wrapping_sub(src_val as u8);
                 }
                 Command::Output {
                     id: _,
@@ -437,8 +441,9 @@ fn compile(
                     ));
                 }
                 Command::AddOffsetData {
+                    dest_offset,
                     src_offset,
-                    dest_list,
+                    multiplier,
                     ..
                 } => todo!(),
                 //{
@@ -453,8 +458,9 @@ fn compile(
                 //        tape[pointer.wrapping_add_signed(*src_offset)].wrapping_add(*total);
                 //}
                 Command::SubOffsetData {
+                    dest_offset,
                     src_offset,
-                    dest_list,
+                    multiplier,
                     ..
                 } => todo!(),
                 Command::Output { id, .. } => {
