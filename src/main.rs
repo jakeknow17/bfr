@@ -240,7 +240,13 @@ fn link(object_filepath: &str, dest_file: &str, keep_object: bool) -> Result<(),
     let ld_status = std::process::Command::new("ld")
         .arg("-o")
         .arg(dest_file)
+        .arg("-dynamic-linker")
+        .arg("/lib64/ld-linux-x86-64.so.2")
+        .arg("/usr/lib/x86_64-linux-gnu/crt1.o")
+        .arg("/usr/lib/x86_64-linux-gnu/crti.o")
+        .arg("-lc")
         .arg(object_filepath)
+        .arg("/usr/lib/x86_64-linux-gnu/crtn.o")
         .spawn()
         .map_err(|_| {
             "Error: `ld` linker not found. Please ensure it is installed on your system."
@@ -265,70 +271,46 @@ fn link(object_filepath: &str, dest_file: &str, keep_object: bool) -> Result<(),
     Ok(())
 }
 
-fn append_assembly_header(out_string: &mut String) {
-    out_string.push_str(
+fn append_assembly_header(out_string: &mut String, ptr_reg: &str, full_byte_reg: &str) {
+    out_string.push_str(&format!(
         r#"
 .section .text
 
-.globl _start
-
-_start:
-    pushq %rbp        # Save previous base pointer
-    movq  %rsp, %rbp  # Set new base pointer
-
-    call main
-
-    # Exit after returning from main
-    movq  $60,  %rax  # Exit system call number
-    xorq  %rdi, %rdi  # Exit status 0
-    syscall           # Make exit system call
+.globl main
 
 main:
     pushq %rbp
     movq  %rsp, %rbp
-    pushq %r12
+    pushq {}
+    pushq {}
 
-    # Allocate memory using mmap
-    movq $9,        %rax  # Mmap system call number
-    movq $0,        %rdi  # Address (NULL for system to choose)
-    movq $0x200000, %rsi  # Allocate 2 MB
-    movq $3,        %rdx  # PROT_READ | PROT_WRITE
-    movq $0x22,     %r10  # MAP_PRIVATE | MAP_ANONYMOUS
-    movq $-1,       %r8   # Fd (-1 for anonymous mapping)
-    movq $0,        %r9   # Offset (0 for anonymous mapping)
-    syscall               # Make mmap system call
-
-    # TODO: Check if mmap failed
+    movq  $0x200000, %rdi
+    call malloc
 
     pushq %rax            # Save tape address to the stack
-    movq  %rax,      %r12 # Move tape address into callee saved register
-    addq  $0x100000, %r12 # Move the pointer to the middle of the tape
+    movq  %rax,      {} # Move tape address into callee saved register
+    addq  $0x100000, {} # Move the pointer to the middle of the tape
 
     # Begin program code
 "#,
-    );
+        ptr_reg, full_byte_reg, ptr_reg, ptr_reg
+    ));
 }
 
-fn append_assembly_footer(out_string: &mut String) {
-    out_string.push_str(
+fn append_assembly_footer(out_string: &mut String, ptr_reg: &str, full_byte_reg: &str) {
+    out_string.push_str(&format!(
         r#"    # At bottom of main
     
-    # Unmap memory from mmap
-    movq $11,       %rax # Munmap system call number
-    movq %r12,      %rdi # Address
-    movq $0x200000, %rsi # 2 MB size
-    syscall
-
-    # TODO: Check if munmap failed
-
     popq %rax
-    popq %r12
+    popq {}
+    popq {}
     popq %rbp
 
     # Return to _start
     ret
 "#,
-    );
+        full_byte_reg, ptr_reg
+    ));
 }
 
 fn compile(
@@ -342,9 +324,9 @@ fn compile(
 
     fn append_pointer_op(
         out_string: &mut String,
+        amount: usize,
         single_op: &str,
         multi_op: &str,
-        amount: usize,
         reg: &str,
         comment: &str,
     ) {
@@ -363,6 +345,8 @@ fn compile(
         amount: u8,
         single_op: &str,
         multi_op: &str,
+        reg: &str,
+        byte_reg: &str,
         comment: &str,
     ) {
         let offset_str = if offset == 0 {
@@ -371,62 +355,39 @@ fn compile(
             format!("{}", offset)
         };
         out_string.push_str(&format!("    # {}\n", comment));
-        out_string.push_str(&format!("    movb {}(%r12), %al\n", offset_str));
+        out_string.push_str(&format!("    movb {}({}), {}\n", offset_str, reg, byte_reg));
         if amount == 1 {
-            out_string.push_str(&format!("    {} %al\n", single_op));
+            out_string.push_str(&format!("    {} {}\n", single_op, byte_reg));
         } else {
-            out_string.push_str(&format!("    {} ${}, %al\n", multi_op, amount));
+            out_string.push_str(&format!("    {} ${}, {}\n", multi_op, amount, byte_reg));
         }
-        out_string.push_str(&format!("    movb %al, {}(%r12)\n", offset_str));
+        out_string.push_str(&format!("    movb {}, {}({})\n", byte_reg, offset_str, reg));
         out_string.push('\n');
     }
 
-    fn append_io_syscall(
+    fn compile_rec(
         out_string: &mut String,
-        syscall_num: i32,
-        fd: i32,
-        id: usize,
-        comment: &str,
+        commands: &[parser::Command],
+        ptr_reg: &str,
+        byte_reg: &str,
     ) {
-        out_string.push_str(&format!(
-            r#"    # {}
-    movq ${}, %rax
-    movq ${}, %rdi
-    movq %r12, %rsi
-    movq $1, %rdx
-    syscall
-"#,
-            comment, syscall_num, fd
-        ));
-
-        // Read
-        if syscall_num == 0 {
-            out_string.push_str(&format!(
-                r#"    testq %rax, %rax
-    jnz   read_nonzero{}
-    movb  $-1, (%r12)
-    read_nonzero{}:
-"#,
-                id, id
-            ));
-        }
-        out_string.push('\n');
-    }
-
-    fn compile_rec(out_string: &mut String, commands: &[parser::Command]) {
         for command in commands {
             match command {
                 Command::IncPointer { amount, .. } => {
-                    append_pointer_op(out_string, "incq", "addq", *amount, "%r12", ">");
+                    append_pointer_op(out_string, *amount, "incq", "addq", ptr_reg, ">");
                 }
                 Command::DecPointer { amount, .. } => {
-                    append_pointer_op(out_string, "decq", "subq", *amount, "%r12", "<");
+                    append_pointer_op(out_string, *amount, "decq", "subq", ptr_reg, "<");
                 }
                 Command::IncData { offset, amount, .. } => {
-                    append_data_op(out_string, *offset, *amount, "incb", "addb", "+");
+                    append_data_op(
+                        out_string, *offset, *amount, "incb", "addb", ptr_reg, byte_reg, "+",
+                    );
                 }
                 Command::DecData { offset, amount, .. } => {
-                    append_data_op(out_string, *offset, *amount, "decb", "subb", "-");
+                    append_data_op(
+                        out_string, *offset, *amount, "decb", "subb", ptr_reg, byte_reg, "-",
+                    );
                 }
                 Command::SetData { offset, value, .. } => {
                     let offset_str = if *offset == 0 {
@@ -436,16 +397,11 @@ fn compile(
                     };
                     out_string.push_str(&format!(
                         "{:24} # ={}\n",
-                        format!("    movb ${}, {}(%r12)", value, offset_str),
+                        format!("    movb ${}, {}({})", value, offset_str, ptr_reg),
                         value
                     ));
                 }
-                Command::AddOffsetData {
-                    dest_offset,
-                    src_offset,
-                    multiplier,
-                    ..
-                } => todo!(),
+                Command::AddOffsetData { .. } => todo!(),
                 //{
                 //    *count += 1;
                 //    let mut total: u8 = 1;
@@ -457,32 +413,33 @@ fn compile(
                 //    tape[pointer.wrapping_add_signed(*src_offset)] =
                 //        tape[pointer.wrapping_add_signed(*src_offset)].wrapping_add(*total);
                 //}
-                Command::SubOffsetData {
-                    dest_offset,
-                    src_offset,
-                    multiplier,
-                    ..
-                } => todo!(),
-                Command::Output { id, .. } => {
-                    append_io_syscall(out_string, 1, 1, *id, ".");
+                Command::SubOffsetData { .. } => todo!(),
+                Command::Output { .. } => {
+                    //append_io_syscall(out_string, 1, 1, *id, ptr_reg, ".");
+                    out_string.push_str("    # .\n");
+                    out_string.push_str(&format!("    movzbl ({}), %edi\n", ptr_reg));
+                    out_string.push_str("    call putchar\n");
+                    out_string.push('\n');
                 }
-                Command::Input { id, .. } => {
-                    append_io_syscall(out_string, 0, 0, *id, ",");
+                Command::Input { .. } => {
+                    //append_io_syscall(out_string, 0, 0, *id, ptr_reg, ",");
+                    out_string.push_str("    # ,\n");
+                    out_string.push_str("    call getchar\n");
+                    out_string.push_str(&format!("    movb %al, ({})\n", ptr_reg));
+                    out_string.push('\n');
                 }
                 Command::Loop { body, id, .. } => {
                     out_string.push_str("    # [\n");
-                    out_string.push_str("    movb (%r12), %al\n");
-                    out_string.push_str("    cmpb $0,     %al\n");
+                    out_string.push_str(&format!("loop{}:\n", id));
+                    out_string.push_str(&format!("    movb ({}), {}\n", ptr_reg, byte_reg));
+                    out_string.push_str(&format!("    cmpb $0,     {}\n", byte_reg));
                     out_string.push_str(&format!("    je   loop{}_end\n", id));
                     out_string.push('\n');
-                    out_string.push_str(&format!("loop{}:\n", id));
 
-                    compile_rec(out_string, body);
+                    compile_rec(out_string, body, ptr_reg, byte_reg);
 
                     out_string.push_str("     # ]\n");
-                    out_string.push_str("    movb (%r12), %al\n");
-                    out_string.push_str("    cmpb $0,     %al\n");
-                    out_string.push_str(&format!("    jne  loop{}\n", id));
+                    out_string.push_str(&format!("    jmp  loop{}\n", id));
                     out_string.push('\n');
                     out_string.push_str(&format!("loop{}_end:\n", id));
                 }
@@ -490,11 +447,15 @@ fn compile(
         }
     }
 
+    let ptr_reg = "%r12";
+    let full_byte_reg = "%r13";
+    let byte_reg = "%r13b";
+
     // Build assembly file
     let mut asm = String::new();
-    append_assembly_header(&mut asm);
-    compile_rec(&mut asm, commands);
-    append_assembly_footer(&mut asm);
+    append_assembly_header(&mut asm, ptr_reg, full_byte_reg);
+    compile_rec(&mut asm, commands, ptr_reg, byte_reg);
+    append_assembly_footer(&mut asm, ptr_reg, full_byte_reg);
 
     if output_asm_file {
         let asm_filepath = replace_extension_filepath(src_filepath, ".s");
