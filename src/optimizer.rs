@@ -1,4 +1,4 @@
-use crate::parser::Command;
+use crate::parser::{Command, Direction};
 
 pub fn is_simple_loop(loop_cmd: &Command) -> (bool, isize) {
     if let Command::Loop { body, .. } = loop_cmd {
@@ -41,95 +41,180 @@ pub fn collapse(commands: &mut Vec<Command>) {
 
         match current_command {
             Command::IncPointer { amount, .. } => {
-                let mut total_amount = *amount;
+                let mut total_amount: isize = *amount as isize;
                 while read_idx + 1 < commands.len() {
-                    if let Command::IncPointer {
-                        amount: next_amount,
-                        ..
-                    } = &commands[read_idx + 1]
-                    {
-                        total_amount += next_amount;
-                        read_idx += 1;
-                    } else {
-                        break;
+                    match &commands[read_idx + 1] {
+                        Command::IncPointer {
+                            amount: next_amount,
+                            ..
+                        } => {
+                            total_amount += *next_amount as isize;
+                            read_idx += 1;
+                        }
+                        Command::DecPointer {
+                            amount: next_amount,
+                            ..
+                        } => {
+                            total_amount -= *next_amount as isize;
+                            read_idx += 1;
+                        }
+                        _ => break,
                     }
                 }
-                commands[write_idx] = Command::IncPointer {
-                    amount: total_amount,
-                    count: 0,
-                };
+
+                if total_amount > 0 {
+                    commands[write_idx] = Command::IncPointer {
+                        amount: total_amount as usize,
+                        count: 0,
+                    };
+                } else if total_amount < 0 {
+                    commands[write_idx] = Command::DecPointer {
+                        amount: (-total_amount) as usize,
+                        count: 0,
+                    };
+                } else {
+                    read_idx += 1; // Don't increment write idx
+                    continue;
+                }
             }
             Command::DecPointer { amount, .. } => {
-                let mut total_amount = *amount;
+                let mut total_amount: isize = *amount as isize;
                 while read_idx + 1 < commands.len() {
-                    if let Command::DecPointer {
-                        amount: next_amount,
-                        ..
-                    } = &commands[read_idx + 1]
-                    {
-                        total_amount += next_amount;
-                        read_idx += 1;
-                    } else {
-                        break;
+                    match &commands[read_idx + 1] {
+                        Command::DecPointer {
+                            amount: next_amount,
+                            ..
+                        } => {
+                            total_amount += *next_amount as isize;
+                            read_idx += 1;
+                        }
+                        Command::IncPointer {
+                            amount: next_amount,
+                            ..
+                        } => {
+                            total_amount -= *next_amount as isize;
+                            read_idx += 1;
+                        }
+                        _ => break,
                     }
                 }
-                commands[write_idx] = Command::DecPointer {
-                    amount: total_amount,
-                    count: 0,
-                };
+
+                if total_amount > 0 {
+                    commands[write_idx] = Command::DecPointer {
+                        amount: total_amount as usize,
+                        count: 0,
+                    };
+                } else if total_amount < 0 {
+                    commands[write_idx] = Command::IncPointer {
+                        amount: (-total_amount) as usize,
+                        count: 0,
+                    };
+                } else {
+                    read_idx += 1; // Don't increment write idx
+                    continue;
+                }
             }
             Command::IncData { offset, amount, .. } => {
-                let mut total_amount = *amount;
+                let mut total_amount: isize = *amount as isize;
                 while read_idx + 1 < commands.len() {
-                    if let Command::IncData {
-                        offset: next_offset,
-                        amount: next_amount,
-                        ..
-                    } = &commands[read_idx + 1]
-                    {
-                        if next_offset == offset {
-                            total_amount += next_amount;
-                            read_idx += 1;
-                        } else {
-                            break;
+                    match &commands[read_idx + 1] {
+                        Command::IncData {
+                            offset: next_offset,
+                            amount: next_amount,
+                            ..
+                        } => {
+                            if next_offset == offset {
+                                total_amount += *next_amount as isize;
+                                read_idx += 1;
+                            } else {
+                                break;
+                            }
                         }
-                    } else {
-                        break;
+                        Command::DecData {
+                            offset: next_offset,
+                            amount: next_amount,
+                            ..
+                        } => {
+                            if next_offset == offset {
+                                total_amount -= *next_amount as isize;
+                                read_idx += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        _ => break,
                     }
                 }
-                commands[write_idx] = Command::IncData {
-                    offset: *offset,
-                    amount: total_amount,
-                    count: 0,
-                };
+
+                if total_amount > 0 {
+                    commands[write_idx] = Command::IncData {
+                        offset: *offset,
+                        amount: total_amount as u8,
+                        count: 0,
+                    };
+                } else if total_amount < 0 {
+                    commands[write_idx] = Command::DecData {
+                        offset: *offset,
+                        amount: (-total_amount) as u8,
+                        count: 0,
+                    };
+                } else {
+                    read_idx += 1; // Don't increment write idx
+                    continue;
+                }
             }
             Command::DecData { offset, amount, .. } => {
-                let mut total_amount = *amount;
+                let mut total_amount: isize = *amount as isize;
                 while read_idx + 1 < commands.len() {
-                    if let Command::DecData {
-                        offset: next_offset,
-                        amount: next_amount,
-                        ..
-                    } = &commands[read_idx + 1]
-                    {
-                        if next_offset == offset {
-                            total_amount += next_amount;
-                            read_idx += 1;
-                        } else {
-                            break;
+                    match &commands[read_idx + 1] {
+                        Command::DecData {
+                            offset: next_offset,
+                            amount: next_amount,
+                            ..
+                        } => {
+                            if next_offset == offset {
+                                total_amount += *next_amount as isize;
+                                read_idx += 1;
+                            } else {
+                                break;
+                            }
                         }
-                    } else {
-                        break;
+                        Command::IncData {
+                            offset: next_offset,
+                            amount: next_amount,
+                            ..
+                        } => {
+                            if next_offset == offset {
+                                total_amount -= *next_amount as isize;
+                                read_idx += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        _ => break,
                     }
                 }
-                commands[write_idx] = Command::DecData {
-                    offset: *offset,
-                    amount: total_amount,
-                    count: 0,
-                };
+
+                if total_amount > 0 {
+                    commands[write_idx] = Command::DecData {
+                        offset: *offset,
+                        amount: total_amount as u8,
+                        count: 0,
+                    };
+                } else if total_amount < 0 {
+                    commands[write_idx] = Command::IncData {
+                        offset: *offset,
+                        amount: (-total_amount) as u8,
+                        count: 0,
+                    };
+                } else {
+                    read_idx += 1; // Don't increment write idx
+                    continue;
+                }
             }
             // Non-collapsible commands
             Command::SetData { .. }
+            | Command::Scan { .. }
             | Command::Output { .. }
             | Command::Input { .. }
             | Command::AddOffsetData { .. }
@@ -257,6 +342,37 @@ fn replace_simple_loops(commands: &mut Vec<Command>) {
     }
 }
 
+fn replace_scans(commands: &mut Vec<Command>) {
+    for i in 0..commands.len() {
+        let current_command = &mut commands[i];
+
+        match current_command {
+            Command::Loop { ref mut body, .. } => {
+                if body.len() != 1 {
+                    fold_zero_loop(body);
+                    continue;
+                }
+                if let Command::IncPointer { amount, .. } = &body[0] {
+                    commands[i] = Command::Scan {
+                        direction: Direction::Right,
+                        skip_amount: *amount,
+                        count: 0,
+                    }
+                } else if let Command::DecPointer { amount, .. } = &body[0] {
+                    commands[i] = Command::Scan {
+                        direction: Direction::Left,
+                        skip_amount: *amount,
+                        count: 0,
+                    }
+                } else {
+                    replace_scans(body);
+                }
+            }
+            _ => (),
+        }
+    }
+}
+
 pub fn optimize(commands: &mut Vec<Command>, optimization_level: u8) {
     if optimization_level > 0 {
         collapse(commands);
@@ -266,5 +382,6 @@ pub fn optimize(commands: &mut Vec<Command>, optimization_level: u8) {
     }
     if optimization_level > 2 {
         replace_simple_loops(commands);
+        replace_scans(commands);
     }
 }

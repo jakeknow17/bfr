@@ -1,4 +1,10 @@
 #[derive(Debug, Clone)]
+pub enum Direction {
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone)]
 pub enum Command {
     IncPointer {
         amount: usize,
@@ -21,6 +27,11 @@ pub enum Command {
     SetData {
         offset: isize,
         value: u8,
+        count: usize,
+    },
+    Scan {
+        direction: Direction,
+        skip_amount: usize,
         count: usize,
     },
     AddOffsetData {
@@ -190,6 +201,17 @@ pub fn pretty_print(commands: &[Command]) {
                     print!("{}={}", offset_str, value);
                     *newline_end = false;
                 }
+                Command::Scan {
+                    direction,
+                    skip_amount,
+                    ..
+                } => {
+                    match direction {
+                        Direction::Left => print!("[(<{})]", skip_amount),
+                        Direction::Right => print!("[(>{})]", skip_amount),
+                    }
+                    *newline_end = false;
+                }
                 Command::AddOffsetData {
                     dest_offset,
                     src_offset,
@@ -202,6 +224,7 @@ pub fn pretty_print(commands: &[Command]) {
                     dest_string
                         .push_str(&format!("{}({}*{})", inverted_str, src_offset, multiplier));
                     print!("({}+={})", dest_offset, dest_string);
+                    *newline_end = false;
                 }
                 Command::SubOffsetData {
                     dest_offset,
@@ -215,6 +238,7 @@ pub fn pretty_print(commands: &[Command]) {
                     dest_string
                         .push_str(&format!("{}({}*{})", inverted_str, src_offset, multiplier));
                     print!("({}-={})", dest_offset, dest_string);
+                    *newline_end = false;
                 }
                 Command::Output { .. } => {
                     print!(".");

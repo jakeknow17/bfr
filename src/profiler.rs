@@ -1,5 +1,5 @@
 use crate::optimizer::is_simple_loop;
-use crate::parser::Command;
+use crate::parser::{Command, Direction};
 
 pub fn print_profile(commands: &[Command]) {
     struct LoopData {
@@ -81,6 +81,17 @@ pub fn print_profile(commands: &[Command]) {
                         format!("{}={}", offset_str, value),
                         count
                     );
+                }
+                Command::Scan {
+                    direction,
+                    skip_amount,
+                    count,
+                } => {
+                    let repr = match direction {
+                        Direction::Left => format!("[(<{})]", skip_amount),
+                        Direction::Right => format!("[(>{})]", skip_amount),
+                    };
+                    println!("{:>6} : {:^6} : {}", curr_idx, repr, count);
                 }
                 Command::AddOffsetData {
                     dest_offset,

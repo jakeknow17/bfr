@@ -96,6 +96,19 @@ pub fn interp(commands: &mut [parser::Command]) {
                     *count += 1;
                     tape[pointer.wrapping_add_signed(*offset)] = *value;
                 }
+                Command::Scan {
+                    direction,
+                    skip_amount,
+                    ref mut count,
+                } => {
+                    *count += 1;
+                    while tape[*pointer] != 0 {
+                        match direction {
+                            parser::Direction::Left => *pointer -= *skip_amount,
+                            parser::Direction::Right => *pointer += *skip_amount,
+                        }
+                    }
+                }
                 Command::AddOffsetData {
                     dest_offset,
                     src_offset,
@@ -395,6 +408,7 @@ fn compile(
                         value
                     ));
                 }
+                Command::Scan { .. } => todo!(),
                 Command::AddOffsetData {
                     src_offset,
                     dest_offset,
@@ -422,16 +436,6 @@ fn compile(
                         byte_reg, dest_offset, ptr_reg
                     ));
                 }
-
-                //*count += 1;
-                //let mut src_val = if *inverted {
-                //    0u8.wrapping_sub(tape[pointer.wrapping_add_signed(*src_offset)]) as usize
-                //} else {
-                //    tape[pointer.wrapping_add_signed(*src_offset)] as usize
-                //};
-                //src_val = src_val.wrapping_mul(*multiplier) % 256;
-                //tape[pointer.wrapping_add_signed(*dest_offset)] =
-                //    tape[pointer.wrapping_add_signed(*dest_offset)].wrapping_add(src_val as u8);
                 Command::SubOffsetData {
                     src_offset,
                     dest_offset,
