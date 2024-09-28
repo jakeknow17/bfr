@@ -130,18 +130,12 @@ pub fn interp(commands: &mut [parser::Command]) {
                     tape[pointer.wrapping_add_signed(*dest_offset)] =
                         tape[pointer.wrapping_add_signed(*dest_offset)].wrapping_sub(src_val as u8);
                 }
-                Command::Output {
-                    id: _,
-                    ref mut count,
-                } => {
+                Command::Output { ref mut count } => {
                     *count += 1;
                     let buf = vec![tape[*pointer]];
                     std::io::stdout().write_all(&buf)?;
                 }
-                Command::Input {
-                    id: _,
-                    ref mut count,
-                } => {
+                Command::Input { ref mut count } => {
                     use std::io::Read;
 
                     *count += 1;
@@ -401,19 +395,70 @@ fn compile(
                         value
                     ));
                 }
-                Command::AddOffsetData { .. } => todo!(),
-                //{
-                //    *count += 1;
-                //    let mut total: u8 = 1;
-                //    for dest in dest_list {
-                //        total = total
-                //            .wrapping_mul(tape[pointer.wrapping_add_signed(*dest.dst_offset)])
-                //            .wrapping_mul(dest.multiplier);
-                //    }
-                //    tape[pointer.wrapping_add_signed(*src_offset)] =
-                //        tape[pointer.wrapping_add_signed(*src_offset)].wrapping_add(*total);
-                //}
-                Command::SubOffsetData { .. } => todo!(),
+                Command::AddOffsetData {
+                    src_offset,
+                    dest_offset,
+                    multiplier,
+                    inverted,
+                    ..
+                } => {
+                    out_string.push_str(&format!(
+                        "    movb {}({}), {}\n",
+                        src_offset, ptr_reg, byte_reg
+                    ));
+                    if *inverted {
+                        out_string.push_str(&format!("    notb {}\n", byte_reg));
+                        out_string.push_str(&format!("    incb {}\n", byte_reg));
+                    }
+                    out_string.push_str(&format!("    movb ${}, %al\n", multiplier));
+                    out_string.push_str(&format!("    mulb {}\n", byte_reg));
+                    out_string.push_str(&format!(
+                        "    movb {}({}), {}\n",
+                        dest_offset, ptr_reg, byte_reg
+                    ));
+                    out_string.push_str(&format!("    addb %al, {}\n", byte_reg));
+                    out_string.push_str(&format!(
+                        "    movb {}, {}({})\n",
+                        byte_reg, dest_offset, ptr_reg
+                    ));
+                }
+
+                //*count += 1;
+                //let mut src_val = if *inverted {
+                //    0u8.wrapping_sub(tape[pointer.wrapping_add_signed(*src_offset)]) as usize
+                //} else {
+                //    tape[pointer.wrapping_add_signed(*src_offset)] as usize
+                //};
+                //src_val = src_val.wrapping_mul(*multiplier) % 256;
+                //tape[pointer.wrapping_add_signed(*dest_offset)] =
+                //    tape[pointer.wrapping_add_signed(*dest_offset)].wrapping_add(src_val as u8);
+                Command::SubOffsetData {
+                    src_offset,
+                    dest_offset,
+                    multiplier,
+                    inverted,
+                    ..
+                } => {
+                    out_string.push_str(&format!(
+                        "    movb {}({}), {}\n",
+                        src_offset, ptr_reg, byte_reg
+                    ));
+                    if *inverted {
+                        out_string.push_str(&format!("    notb {}\n", byte_reg));
+                        out_string.push_str(&format!("    incb {}\n", byte_reg));
+                    }
+                    out_string.push_str(&format!("    movb ${}, %al\n", multiplier));
+                    out_string.push_str(&format!("    mulb {}\n", byte_reg));
+                    out_string.push_str(&format!(
+                        "    movb {}({}), {}\n",
+                        dest_offset, ptr_reg, byte_reg
+                    ));
+                    out_string.push_str(&format!("    subb %al, {}\n", byte_reg));
+                    out_string.push_str(&format!(
+                        "    movb {}, {}({})\n",
+                        byte_reg, dest_offset, ptr_reg
+                    ));
+                }
                 Command::Output { .. } => {
                     //append_io_syscall(out_string, 1, 1, *id, ptr_reg, ".");
                     out_string.push_str("    # .\n");
