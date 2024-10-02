@@ -30,6 +30,7 @@ pub enum Command {
         count: usize,
     },
     Scan {
+        id: usize,
         direction: Direction,
         skip_amount: usize,
         count: usize,

@@ -347,19 +347,23 @@ fn replace_scans(commands: &mut Vec<Command>) {
         let current_command = &mut commands[i];
 
         match current_command {
-            Command::Loop { ref mut body, .. } => {
+            Command::Loop {
+                id, ref mut body, ..
+            } => {
                 if body.len() != 1 {
                     fold_zero_loop(body);
                     continue;
                 }
                 if let Command::IncPointer { amount, .. } = &body[0] {
                     commands[i] = Command::Scan {
+                        id: *id,
                         direction: Direction::Right,
                         skip_amount: *amount,
                         count: 0,
                     }
                 } else if let Command::DecPointer { amount, .. } = &body[0] {
                     commands[i] = Command::Scan {
+                        id: *id,
                         direction: Direction::Left,
                         skip_amount: *amount,
                         count: 0,

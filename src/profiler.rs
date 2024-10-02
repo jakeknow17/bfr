@@ -83,6 +83,7 @@ pub fn print_profile(commands: &[Command]) {
                     );
                 }
                 Command::Scan {
+                    id: _,
                     direction,
                     skip_amount,
                     count,
@@ -136,8 +137,8 @@ pub fn print_profile(commands: &[Command]) {
                     println!("{:>6} : {:^6} : {}", curr_idx, ",", count);
                 }
                 Command::Loop {
-                    body,
                     id: _,
+                    body,
                     start_count,
                     end_count,
                 } => {
