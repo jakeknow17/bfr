@@ -289,8 +289,12 @@ fn append_assembly_header(out_string: &mut String, ptr_reg: &str, full_byte_reg:
 .align 32
 mask_skip2:
   .byte 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF
+mask_skip2_reverse:
+  .byte 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00
 mask_skip4:
   .byte 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF
+mask_skip4_reverse:
+  .byte 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00
 
 .section .text
 
@@ -437,37 +441,54 @@ fn compile(
                                     out_string.push_str("    vmovdqa mask_skip4(%rip), %ymm3\n")
                                 }
                                 out_string.push_str("    xorq %rsi, %rsi\n");
+                                out_string.push_str("    vpxor %ymm1, %ymm1, %ymm1\n");
                                 out_string.push_str(&format!("vector{}_loop_start:\n", id));
                                 out_string
                                     .push_str(&format!("    vmovdqu ({}, %rsi), %ymm0\n", ptr_reg));
                                 if *skip_amount == 2 || *skip_amount == 4 {
                                     out_string.push_str("    vpor %ymm3, %ymm0, %ymm0\n");
                                 }
-                                out_string.push_str("    vpxor %ymm1, %ymm1, %ymm1\n");
                                 out_string.push_str("    vpcmpeqb %ymm1, %ymm0, %ymm2\n");
                                 out_string.push_str("    vpmovmskb %ymm2, %eax\n");
                                 out_string.push_str("    testl %eax, %eax\n");
                                 out_string.push_str(&format!("    jnz vector{}_found_zero\n", id));
-                                out_string.push_str("    addl $32, %esi\n");
+                                out_string.push_str("    addq $32, %rsi\n");
                                 out_string.push_str(&format!("    jmp vector{}_loop_start\n", id));
                                 out_string.push_str(&format!("vector{}_found_zero:\n", id));
-                                out_string.push_str("    bsf %eax, %eax\n");
-                                out_string.push_str("    add %eax, %esi\n");
-                                out_string.push_str(&format!("    add %rsi, {}\n", ptr_reg));
+                                out_string.push_str("    bsfl %eax, %eax\n");
+                                out_string.push_str("    addq %rax, %rsi\n");
+                                out_string.push_str(&format!("    addq %rsi, {}\n", ptr_reg));
                                 out_string.push('\n');
                             }
                             Direction::Left => {
-                                let loop_cmd = Command::Loop {
-                                    id: *id,
-                                    body: vec![Command::DecPointer {
-                                        amount: *skip_amount,
-                                        count: 0,
-                                    }],
-                                    start_count: 0,
-                                    end_count: 0,
-                                };
-                                let new_cmds = vec![loop_cmd];
-                                compile_rec(out_string, &new_cmds, ptr_reg, byte_reg)
+                                out_string
+                                    .push_str(&format!("    # [{}]\n", "<".repeat(*skip_amount)));
+                                if *skip_amount == 2 {
+                                    out_string
+                                        .push_str("    vmovdqa mask_skip2_reverse(%rip), %ymm3\n")
+                                } else if *skip_amount == 4 {
+                                    out_string
+                                        .push_str("    vmovdqa mask_skip4_reverse(%rip), %ymm3\n")
+                                }
+                                out_string.push_str("    movq $-31, %rsi\n");
+                                out_string.push_str("    vpxor %ymm1, %ymm1, %ymm1\n");
+                                out_string.push_str(&format!("vector{}_loop_start:\n", id));
+                                out_string
+                                    .push_str(&format!("    vmovdqu ({}, %rsi), %ymm0\n", ptr_reg));
+                                if *skip_amount == 2 || *skip_amount == 4 {
+                                    out_string.push_str("    vpor %ymm3, %ymm0, %ymm0\n");
+                                }
+                                out_string.push_str("    vpcmpeqb %ymm1, %ymm0, %ymm2\n");
+                                out_string.push_str("    vpmovmskb %ymm2, %eax\n");
+                                out_string.push_str("    testl %eax, %eax\n");
+                                out_string.push_str(&format!("    jnz vector{}_found_zero\n", id));
+                                out_string.push_str("    subq $32, %rsi\n");
+                                out_string.push_str(&format!("    jmp vector{}_loop_start\n", id));
+                                out_string.push_str(&format!("vector{}_found_zero:\n", id));
+                                out_string.push_str("    bsrl %eax, %eax\n");
+                                out_string.push_str("    addq %rax, %rsi\n");
+                                out_string.push_str(&format!("    addq %rsi, {}\n", ptr_reg));
+                                out_string.push('\n');
                             }
                         },
                         _ => {
