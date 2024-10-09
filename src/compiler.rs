@@ -1,4 +1,7 @@
-use crate::parser::{Command, Direction};
+use crate::parser::{Command, Direction, OutputType};
+
+const INIT_TAPE_SIZE: usize = 0x200000;
+const INIT_POINTER_LOC: usize = INIT_TAPE_SIZE / 2;
 
 fn replace_extension_filepath(filepath: &str, ext: &str) -> String {
     return if let Some(pos) = filepath.rfind('.') {
@@ -113,16 +116,16 @@ main:
     pushq {}
     pushq {}
 
-    movq  $0x200000, %rdi
+    movq  ${}, %rdi
     call malloc
 
     pushq %rax            # Save tape address to the stack
     movq  %rax,      {} # Move tape address into callee saved register
-    addq  $0x100000, {} # Move the pointer to the middle of the tape
+    addq  ${}, {} # Move the pointer to the middle of the tape
 
     # Begin program code
 "#,
-        ptr_reg, full_byte_reg, ptr_reg, ptr_reg
+        ptr_reg, full_byte_reg, INIT_TAPE_SIZE, ptr_reg, INIT_POINTER_LOC, ptr_reg
     ));
 }
 
@@ -378,18 +381,23 @@ pub fn compile(
                         byte_reg, dest_offset, ptr_reg
                     ));
                 }
-                Command::Output { .. } => {
-                    //append_io_syscall(out_string, 1, 1, *id, ptr_reg, ".");
+                Command::Output { out_type, .. } => {
                     out_string.push_str("    # .\n");
-                    out_string.push_str(&format!("    movzbl ({}), %edi\n", ptr_reg));
+                    match out_type {
+                        OutputType::Const(val) => {
+                            out_string.push_str(&format!("    movl ${}, %edi\n", val))
+                        }
+                        OutputType::Cell { offset } => out_string
+                            .push_str(&format!("    movzbl {}({}), %edi\n", offset, ptr_reg)),
+                    }
                     out_string.push_str("    call putchar\n");
                     out_string.push('\n');
                 }
-                Command::Input { .. } => {
+                Command::Input { offset, .. } => {
                     //append_io_syscall(out_string, 0, 0, *id, ptr_reg, ",");
                     out_string.push_str("    # ,\n");
                     out_string.push_str("    call getchar\n");
-                    out_string.push_str(&format!("    movb %al, ({})\n", ptr_reg));
+                    out_string.push_str(&format!("    movb %al, {}({})\n", offset, ptr_reg));
                     out_string.push('\n');
                 }
                 Command::Loop { body, id, .. } => {

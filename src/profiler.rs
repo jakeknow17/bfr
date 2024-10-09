@@ -130,10 +130,10 @@ pub fn print_profile(commands: &[Command]) {
                         count
                     );
                 }
-                Command::Output { count } => {
+                Command::Output { out_type: _, count } => {
                     println!("{:>6} : {:^6} : {}", curr_idx, ".", count);
                 }
-                Command::Input { count } => {
+                Command::Input { offset: _, count } => {
                     println!("{:>6} : {:^6} : {}", curr_idx, ",", count);
                 }
                 Command::Loop {

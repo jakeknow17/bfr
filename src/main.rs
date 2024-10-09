@@ -2,6 +2,7 @@ mod compiler;
 mod interp;
 mod optimizer;
 mod parser;
+mod partial;
 mod profiler;
 
 use clap::Parser;
@@ -41,6 +42,10 @@ struct Args {
     /// Optimization level (0-3)
     #[arg(short = 'O', default_value_t = 1)]
     optimization_level: u8,
+
+    /// Disables partial evaluation when compiling
+    #[arg(long = "no-partial-eval")]
+    disable_partial_eval: bool,
 }
 
 fn main() {
@@ -68,6 +73,10 @@ fn main() {
             profiler::print_profile(&commands);
         }
         return;
+    }
+
+    if !args.disable_partial_eval {
+        partial::partial_eval(&mut commands);
     }
 
     compiler::compile(

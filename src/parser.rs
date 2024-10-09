@@ -50,9 +50,11 @@ pub enum Command {
         count: usize,
     },
     Output {
+        out_type: OutputType,
         count: usize,
     },
     Input {
+        offset: isize,
         count: usize,
     },
     Loop {
@@ -61,6 +63,12 @@ pub enum Command {
         start_count: usize,
         end_count: usize,
     },
+}
+
+#[derive(Debug, Clone)]
+pub enum OutputType {
+    Const(u8),
+    Cell { offset: isize },
 }
 
 pub fn parse(src: &String) -> Vec<Command> {
@@ -88,8 +96,14 @@ pub fn parse(src: &String) -> Vec<Command> {
                 amount: 1,
                 count: 0,
             }),
-            '.' => Some(Command::Output { count: 0 }),
-            ',' => Some(Command::Input { count: 0 }),
+            '.' => Some(Command::Output {
+                out_type: OutputType::Cell { offset: 0 },
+                count: 0,
+            }),
+            ',' => Some(Command::Input {
+                offset: 0,
+                count: 0,
+            }),
             '[' => {
                 stack.push(vec![]);
                 None
