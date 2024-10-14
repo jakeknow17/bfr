@@ -1,7 +1,7 @@
 use crate::parser::{Command, Direction, OutputType};
 
-const INIT_TAPE_SIZE: usize = 0x100000;
-const INIT_POINTER_LOC: usize = 0x400;
+const INIT_TAPE_SIZE: usize = 0x200000;
+const INIT_POINTER_LOC: usize = 0x4000;
 
 pub fn interp(commands: &mut [Command]) {
     fn interp_rec(

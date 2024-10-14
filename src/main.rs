@@ -76,7 +76,7 @@ fn main() {
     }
 
     if !args.disable_partial_eval {
-        partial::partial_eval(&mut commands);
+        commands = partial::partial_eval(&commands);
     }
 
     compiler::compile(
