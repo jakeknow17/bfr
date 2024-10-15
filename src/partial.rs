@@ -1,4 +1,4 @@
-use crate::parser::{Command, Direction, OutputType};
+use crate::parser::{pretty_print, Command, Direction, OutputType};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -51,7 +51,7 @@ fn check_loop_pointer(command: &Command) -> bool {
 
 fn add_prev_value(
     idx: usize,
-    tape: &mut HashMap<usize, AbstractCell>,
+    tape: &HashMap<usize, AbstractCell>,
     prev_values: &mut HashMap<usize, u8>,
     should_add: bool,
 ) {
@@ -62,6 +62,8 @@ fn add_prev_value(
         if let AbstractCell::Value(cell_value) = cell {
             prev_values.entry(idx).or_insert(*cell_value);
         }
+    } else {
+        prev_values.entry(idx).or_insert(0);
     }
 }
 
@@ -262,6 +264,12 @@ fn step(
                 .unwrap_or(&AbstractCell::Value(0))
             {
                 AbstractCell::Value(cell_val) => {
+                    add_prev_value(
+                        pointer.wrapping_add_signed(*offset),
+                        tape,
+                        prev_values,
+                        inside_loop,
+                    );
                     cmd_buf.push(Command::Output {
                         out_type: OutputType::Const(*cell_val),
                         count: 0,
@@ -279,7 +287,7 @@ fn step(
                 pointer.wrapping_add_signed(*offset),
                 tape,
                 prev_values,
-                inside_loop,
+                true,
             );
             tape.insert(pointer.wrapping_add_signed(*offset), AbstractCell::Top);
             cmd_buf.push(command.clone());
@@ -528,6 +536,7 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
 
     let mut error_occurred = false;
     for cmd in cmds {
+        let prev_pointer = pointer;
         if !error_occurred {
             let res = step(
                 &cmd,
@@ -560,15 +569,41 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                                     count: 0,
                                 });
                             }
-                            abstract_pointer = abstract_pointer.wrapping_add_signed(pointer_diff);
                             prev_values.clear();
                         }
+                        abstract_pointer = pointer;
                         cmd_buf.clear();
                         new_cmds.push(cmd.clone());
                     }
                     None => {
-                        for buf_cmd in &cmd_buf {
-                            new_cmds.push(buf_cmd.clone());
+                        if cmd_buf.len() > 0 {
+                            let pointer_diff =
+                                (prev_pointer as isize) - (abstract_pointer as isize);
+                            if pointer_diff > 0 {
+                                new_cmds.push(Command::IncPointer {
+                                    amount: pointer_diff as usize,
+                                    count: 0,
+                                });
+                            } else if pointer_diff < 0 {
+                                new_cmds.push(Command::DecPointer {
+                                    amount: -pointer_diff as usize,
+                                    count: 0,
+                                });
+                            }
+                            abstract_pointer = abstract_pointer.wrapping_add_signed(pointer_diff);
+                            if prev_values.len() > 0 {
+                                for (key, value) in &prev_values {
+                                    new_cmds.push(Command::SetData {
+                                        offset: (*key as isize) - (abstract_pointer as isize),
+                                        value: *value,
+                                        count: 0,
+                                    })
+                                }
+                                prev_values.clear();
+                            }
+                            for buf_cmd in &cmd_buf {
+                                new_cmds.push(buf_cmd.clone());
+                            }
                         }
                         cmd_buf.clear();
                     }
@@ -581,7 +616,7 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                     }
                     for (key, value) in &tape {
                         if let AbstractCell::Value(cell_val) = value {
-                            cmd_buf.push(Command::SetData {
+                            new_cmds.push(Command::SetData {
                                 offset: (*key as isize) - (abstract_pointer as isize),
                                 value: *cell_val,
                                 count: 0,
@@ -590,24 +625,24 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                     }
                     let pointer_diff = (pointer as isize) - (abstract_pointer as isize);
                     if pointer_diff > 0 {
-                        cmd_buf.push(Command::IncPointer {
+                        new_cmds.push(Command::IncPointer {
                             amount: pointer_diff as usize,
                             count: 0,
                         });
                     } else if pointer_diff < 0 {
-                        cmd_buf.push(Command::DecPointer {
+                        new_cmds.push(Command::DecPointer {
                             amount: -pointer_diff as usize,
                             count: 0,
                         });
                     }
                     abstract_pointer = abstract_pointer.wrapping_add_signed(pointer_diff);
-                    cmd_buf.push(cmd.clone());
+                    new_cmds.push(cmd.clone());
                 }
             }
         } else {
-            cmd_buf.push(cmd.clone());
+            new_cmds.push(cmd.clone());
         }
     }
 
-    return cmd_buf;
+    return new_cmds;
 }

@@ -169,7 +169,7 @@ pub fn pretty_print(commands: &[Command]) {
                     if *amount == 1 {
                         print!(">");
                     } else {
-                        print!(">{}", amount);
+                        print!("(>{})", amount);
                     }
                     *newline_end = false;
                 }
@@ -177,7 +177,7 @@ pub fn pretty_print(commands: &[Command]) {
                     if *amount == 1 {
                         print!("<");
                     } else {
-                        print!("<{}", amount);
+                        print!("(<{})", amount);
                     }
                     *newline_end = false;
                 }
@@ -190,7 +190,7 @@ pub fn pretty_print(commands: &[Command]) {
                     if *amount == 1 {
                         print!("{}+", offset_str);
                     } else {
-                        print!("{}+{}", offset_str, amount);
+                        print!("({}+{})", offset_str, amount);
                     }
                     *newline_end = false;
                 }
@@ -203,7 +203,7 @@ pub fn pretty_print(commands: &[Command]) {
                     if *amount == 1 {
                         print!("{}-", offset_str);
                     } else {
-                        print!("{}-{}", offset_str, amount);
+                        print!("({}-{})", offset_str, amount);
                     }
                     *newline_end = false;
                 }
@@ -213,7 +213,7 @@ pub fn pretty_print(commands: &[Command]) {
                     } else {
                         format!("({})", offset)
                     };
-                    print!("{}={}", offset_str, value);
+                    print!("({}={})", offset_str, value);
                     *newline_end = false;
                 }
                 Command::Scan {
@@ -255,8 +255,15 @@ pub fn pretty_print(commands: &[Command]) {
                     print!("({}-={})", dest_offset, dest_string);
                     *newline_end = false;
                 }
-                Command::Output { .. } => {
-                    print!(".");
+                Command::Output { out_type, .. } => {
+                    match out_type {
+                        OutputType::Const(val) => {
+                            print!("(.{val})");
+                        }
+                        OutputType::Cell { offset: _ } => {
+                            print!(".");
+                        }
+                    }
                     *newline_end = false;
                 }
                 Command::Input { .. } => {

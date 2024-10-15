@@ -139,6 +139,7 @@ fn append_assembly_footer(out_string: &mut String, ptr_reg: &str, full_byte_reg:
     popq %rbp
 
     # Return to _start
+    movq $0, %rax
     ret
 "#,
         full_byte_reg, ptr_reg
