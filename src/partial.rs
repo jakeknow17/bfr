@@ -14,6 +14,11 @@ enum AbstractPointer {
     Top,
 }
 
+struct IOCommand {
+    command: Command,
+    pointer: usize,
+}
+
 const INIT_POINTER_LOC: usize = 0x4000;
 
 fn check_loop_pointer(command: &Command) -> bool {
@@ -72,7 +77,7 @@ fn step(
     tape: &mut HashMap<usize, AbstractCell>,
     pointer: &mut usize,
     prev_values: &mut HashMap<usize, u8>,
-    cmd_buf: &mut Vec<Command>,
+    cmd_buf: &mut Vec<IOCommand>,
     inside_loop: bool,
 ) -> Result<Option<()>, String> {
     match command {
@@ -256,7 +261,10 @@ fn step(
         }
         Command::Output { out_type, .. } => match out_type {
             OutputType::Const(_) => {
-                cmd_buf.push(command.clone());
+                cmd_buf.push(IOCommand {
+                    command: command.clone(),
+                    pointer: *pointer,
+                });
                 Ok(None)
             }
             OutputType::Cell { offset } => match tape
@@ -270,14 +278,20 @@ fn step(
                         prev_values,
                         inside_loop,
                     );
-                    cmd_buf.push(Command::Output {
-                        out_type: OutputType::Const(*cell_val),
-                        count: 0,
+                    cmd_buf.push(IOCommand {
+                        command: Command::Output {
+                            out_type: OutputType::Const(*cell_val),
+                            count: 0,
+                        },
+                        pointer: *pointer,
                     });
                     Ok(None)
                 }
                 AbstractCell::Top => {
-                    cmd_buf.push(command.clone());
+                    cmd_buf.push(IOCommand {
+                        command: command.clone(),
+                        pointer: *pointer,
+                    });
                     Ok(None)
                 }
             },
@@ -290,7 +304,10 @@ fn step(
                 true,
             );
             tape.insert(pointer.wrapping_add_signed(*offset), AbstractCell::Top);
-            cmd_buf.push(command.clone());
+            cmd_buf.push(IOCommand {
+                command: command.clone(),
+                pointer: *pointer,
+            });
             Ok(None)
         }
         Command::Loop { id: _, body, .. } => {
@@ -372,7 +389,7 @@ fn step_uncertain(
     tape: &mut HashMap<usize, AbstractCell>,
     pointer: &mut usize,
     prev_values: &mut HashMap<usize, u8>,
-    cmd_buf: &mut Vec<Command>,
+    cmd_buf: &mut Vec<IOCommand>,
     inside_loop: bool,
 ) -> Result<(), String> {
     match command {
@@ -532,7 +549,7 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
     let mut abstract_pointer = INIT_POINTER_LOC;
     let mut pointer = INIT_POINTER_LOC;
     let mut prev_values: HashMap<usize, u8> = HashMap::new();
-    let mut cmd_buf: Vec<Command> = vec![];
+    let mut cmd_buf: Vec<IOCommand> = vec![];
 
     let mut error_occurred = false;
     for cmd in cmds {
@@ -557,40 +574,39 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                                     count: 0,
                                 })
                             }
-                            let pointer_diff = (pointer as isize) - (abstract_pointer as isize);
-                            if pointer_diff > 0 {
-                                new_cmds.push(Command::IncPointer {
-                                    amount: pointer_diff as usize,
-                                    count: 0,
-                                });
-                            } else if pointer_diff < 0 {
-                                new_cmds.push(Command::DecPointer {
-                                    amount: -pointer_diff as usize,
-                                    count: 0,
-                                });
-                            }
-                            prev_values.clear();
                         }
-                        abstract_pointer = pointer;
+                        let prev_pointer_diff =
+                            (prev_pointer as isize) - (abstract_pointer as isize);
+                        if prev_pointer_diff > 0 {
+                            new_cmds.push(Command::IncPointer {
+                                amount: prev_pointer_diff as usize,
+                                count: 0,
+                            });
+                        } else if prev_pointer_diff < 0 {
+                            new_cmds.push(Command::DecPointer {
+                                amount: -prev_pointer_diff as usize,
+                                count: 0,
+                            });
+                        }
+                        prev_values.clear();
                         cmd_buf.clear();
                         new_cmds.push(cmd.clone());
+                        let pointer_diff = (pointer as isize) - (abstract_pointer as isize);
+                        if pointer_diff > 0 {
+                            new_cmds.push(Command::IncPointer {
+                                amount: pointer_diff as usize,
+                                count: 0,
+                            });
+                        } else if pointer_diff < 0 {
+                            new_cmds.push(Command::DecPointer {
+                                amount: -pointer_diff as usize,
+                                count: 0,
+                            });
+                        }
+                        abstract_pointer = pointer;
                     }
                     None => {
                         if cmd_buf.len() > 0 {
-                            let pointer_diff =
-                                (prev_pointer as isize) - (abstract_pointer as isize);
-                            if pointer_diff > 0 {
-                                new_cmds.push(Command::IncPointer {
-                                    amount: pointer_diff as usize,
-                                    count: 0,
-                                });
-                            } else if pointer_diff < 0 {
-                                new_cmds.push(Command::DecPointer {
-                                    amount: -pointer_diff as usize,
-                                    count: 0,
-                                });
-                            }
-                            abstract_pointer = abstract_pointer.wrapping_add_signed(pointer_diff);
                             if prev_values.len() > 0 {
                                 for (key, value) in &prev_values {
                                     new_cmds.push(Command::SetData {
@@ -602,9 +618,24 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                                 prev_values.clear();
                             }
                             for buf_cmd in &cmd_buf {
-                                new_cmds.push(buf_cmd.clone());
+                                let pointer_diff =
+                                    (buf_cmd.pointer as isize) - (abstract_pointer as isize);
+                                if pointer_diff > 0 {
+                                    new_cmds.push(Command::IncPointer {
+                                        amount: pointer_diff as usize,
+                                        count: 0,
+                                    });
+                                } else if pointer_diff < 0 {
+                                    new_cmds.push(Command::DecPointer {
+                                        amount: -pointer_diff as usize,
+                                        count: 0,
+                                    });
+                                }
+                                abstract_pointer = buf_cmd.pointer;
+                                new_cmds.push(buf_cmd.command.clone());
                             }
                         }
+                        prev_values.clear();
                         cmd_buf.clear();
                     }
                 },
@@ -623,7 +654,7 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                             })
                         }
                     }
-                    let pointer_diff = (pointer as isize) - (abstract_pointer as isize);
+                    let pointer_diff = (prev_pointer as isize) - (abstract_pointer as isize);
                     if pointer_diff > 0 {
                         new_cmds.push(Command::IncPointer {
                             amount: pointer_diff as usize,
@@ -635,7 +666,7 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                             count: 0,
                         });
                     }
-                    abstract_pointer = abstract_pointer.wrapping_add_signed(pointer_diff);
+                    abstract_pointer = prev_pointer;
                     new_cmds.push(cmd.clone());
                 }
             }
