@@ -53,9 +53,9 @@ fn add_prev_value(
     idx: usize,
     tape: &mut HashMap<usize, AbstractCell>,
     prev_values: &mut HashMap<usize, u8>,
-    inside_loop: bool,
+    should_add: bool,
 ) {
-    if !inside_loop {
+    if !should_add {
         return;
     }
     if let Some(cell) = tape.get(&idx) {
@@ -253,7 +253,10 @@ fn step(
             }
         }
         Command::Output { out_type, .. } => match out_type {
-            OutputType::Const(_) => Ok(Some(())),
+            OutputType::Const(_) => {
+                cmd_buf.push(command.clone());
+                Ok(None)
+            }
             OutputType::Cell { offset } => match tape
                 .get(&pointer.wrapping_add_signed(*offset))
                 .unwrap_or(&AbstractCell::Value(0))
@@ -265,7 +268,10 @@ fn step(
                     });
                     Ok(None)
                 }
-                AbstractCell::Top => Ok(Some(())),
+                AbstractCell::Top => {
+                    cmd_buf.push(command.clone());
+                    Ok(None)
+                }
             },
         },
         Command::Input { offset, .. } => {
@@ -276,7 +282,8 @@ fn step(
                 inside_loop,
             );
             tape.insert(pointer.wrapping_add_signed(*offset), AbstractCell::Top);
-            Ok(Some(()))
+            cmd_buf.push(command.clone());
+            Ok(None)
         }
         Command::Loop { id: _, body, .. } => {
             match tape.get(pointer).unwrap_or(&AbstractCell::Value(0)) {
@@ -511,6 +518,8 @@ fn step_uncertain(
 }
 
 pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
+    let mut new_cmds: Vec<Command> = vec![];
+
     let mut tape: HashMap<usize, AbstractCell> = HashMap::new();
     let mut abstract_pointer = INIT_POINTER_LOC;
     let mut pointer = INIT_POINTER_LOC;
@@ -533,7 +542,7 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                     Some(_) => {
                         if prev_values.len() > 0 {
                             for (key, value) in &prev_values {
-                                cmd_buf.push(Command::SetData {
+                                new_cmds.push(Command::SetData {
                                     offset: (*key as isize) - (abstract_pointer as isize),
                                     value: *value,
                                     count: 0,
@@ -541,12 +550,12 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                             }
                             let pointer_diff = (pointer as isize) - (abstract_pointer as isize);
                             if pointer_diff > 0 {
-                                cmd_buf.push(Command::IncPointer {
+                                new_cmds.push(Command::IncPointer {
                                     amount: pointer_diff as usize,
                                     count: 0,
                                 });
                             } else if pointer_diff < 0 {
-                                cmd_buf.push(Command::DecPointer {
+                                new_cmds.push(Command::DecPointer {
                                     amount: -pointer_diff as usize,
                                     count: 0,
                                 });
@@ -554,11 +563,17 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                             abstract_pointer = abstract_pointer.wrapping_add_signed(pointer_diff);
                             prev_values.clear();
                         }
-                        cmd_buf.push(cmd.clone());
+                        cmd_buf.clear();
+                        new_cmds.push(cmd.clone());
                     }
-                    None => (),
+                    None => {
+                        for buf_cmd in &cmd_buf {
+                            new_cmds.push(buf_cmd.clone());
+                        }
+                        cmd_buf.clear();
+                    }
                 },
-                Err(e) => {
+                Err(_e) => {
                     error_occurred = true;
                     //eprintln!("Error in partial evaulation: {e}");
                     for (key, value) in &prev_values {
