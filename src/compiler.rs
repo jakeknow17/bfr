@@ -91,6 +91,38 @@ fn link(object_filepath: &str, dest_file: &str, keep_object: bool) -> Result<(),
     Ok(())
 }
 
+fn clang(asm_file: &str, dest_file: &str, keep_object: bool) -> Result<(), String> {
+    let mut clang_cmd = std::process::Command::new("clang");
+
+    clang_cmd
+        .arg("-o")
+        .arg(dest_file)
+        .arg(asm_file);
+
+    if keep_object {
+        clang_cmd.arg("-c");
+    }
+
+    let mut clang_process = clang_cmd.spawn().map_err(|_| {
+        "Error: `clang` compiler not found. Please ensure it is installed on your system."
+            .to_string()
+    })?;
+
+    let clang_status = clang_process.wait().map_err(|_| {
+        "Error: Failed to wait for clang process.".to_string()
+    })?;
+
+
+    if !clang_status.success() {
+        return Err(format!(
+            "Error: Clang failed with exit code: {:?}",
+            clang_status.code()
+        ));
+    }
+
+    Ok(())
+}
+
 fn append_assembly_header(out_string: &mut String, ptr_reg: &str, full_byte_reg: &str) {
     out_string.push_str(&format!(
         r#"
@@ -150,7 +182,7 @@ pub fn compile(
     commands: &[Command],
     src_filepath: &str,
     dest_filename: &str,
-    output_asm_file: bool,
+    output_binary_file: bool,
     output_object_file: bool,
 ) {
     use std::io::Write;
@@ -430,28 +462,33 @@ pub fn compile(
     compile_rec(&mut asm, commands, ptr_reg, byte_reg);
     append_assembly_footer(&mut asm, ptr_reg, full_byte_reg);
 
-    if output_asm_file {
-        let asm_filepath = replace_extension_filepath(src_filepath, ".s");
-        let asm_filepath = strip_directories_filepath(&asm_filepath);
-        let mut asm_file = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&asm_filepath)
-            .expect("Unable to open output file");
-        asm_file
-            .write_all(asm.as_bytes())
-            .expect("Unable to write to assembly file");
-    }
+    let asm_filepath = replace_extension_filepath(src_filepath, ".s");
+    let asm_filepath = strip_directories_filepath(&asm_filepath);
+    let mut asm_file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&asm_filepath)
+        .expect("Unable to open output file");
+    asm_file
+        .write_all(asm.as_bytes())
+        .expect("Unable to write to assembly file");
 
-    // Assemble and link output
-    let object_filepath = replace_extension_filepath(src_filepath, ".o");
-    let object_filepath = strip_directories_filepath(&object_filepath);
-    if let Err(e) = assemble(&asm, &object_filepath) {
-        eprintln!("{}", e);
-        return;
-    }
-    if let Err(e) = link(&object_filepath, dest_filename, output_object_file) {
-        eprintln!("{}", e);
+    if output_binary_file {
+        // Assemble and link output
+        let object_filepath = replace_extension_filepath(src_filepath, ".o");
+        let object_filepath = strip_directories_filepath(&object_filepath);
+
+        if let Ok(()) = clang(&asm_filepath, dest_filename, output_object_file) {
+            return;
+        }
+
+        if let Err(e) = assemble(&asm, &object_filepath) {
+            eprintln!("{}", e);
+            return;
+        }
+        if let Err(e) = link(&object_filepath, dest_filename, output_object_file) {
+            eprintln!("{}", e);
+        }
     }
 }

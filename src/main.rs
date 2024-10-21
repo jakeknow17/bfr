@@ -32,8 +32,8 @@ struct Args {
     interp: bool,
 
     /// Output assembly file
-    #[arg(short = 'S', long = "assembly")]
-    output_asm: bool,
+    #[arg(long = "no-binary")]
+    no_binary: bool,
 
     /// Output object file
     #[arg(short = 'c', long = "object")]
@@ -83,7 +83,7 @@ fn main() {
         &commands,
         &args.file_name,
         &args.out_file,
-        args.output_asm,
+        !args.no_binary,
         args.output_object,
     );
 }

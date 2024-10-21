@@ -39,13 +39,13 @@ fn check_loop_pointer(command: &Command) -> bool {
                 ..
             } => *skip_amount == 0,
             Command::Loop { id: _, body, .. } => {
-                let init_rel_pointer = *rel_pointer;
+                let mut curr_rel_pointer = 0;
                 for loop_cmd in body {
-                    if !check_loop_pointer_rec(loop_cmd, rel_pointer) {
+                    if !check_loop_pointer_rec(loop_cmd, &mut curr_rel_pointer) {
                         return false;
                     }
                 }
-                init_rel_pointer == *rel_pointer
+                curr_rel_pointer == 0
             }
             _ => true,
         }
@@ -390,7 +390,7 @@ fn step_uncertain(
     pointer: &mut usize,
     prev_values: &mut HashMap<usize, u8>,
     cmd_buf: &mut Vec<IOCommand>,
-    inside_loop: bool,
+    _inside_loop: bool,
 ) -> Result<(), String> {
     match command {
         Command::IncPointer { amount, .. } => {
@@ -674,6 +674,8 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
             new_cmds.push(cmd.clone());
         }
     }
+
+    // pretty_print(&new_cmds);
 
     return new_cmds;
 }
