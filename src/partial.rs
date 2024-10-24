@@ -1,4 +1,4 @@
-use crate::parser::{pretty_print, Command, Direction, OutputType};
+use crate::parser::{Command, Direction, OutputType};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -20,13 +20,6 @@ struct IOCommand {
 }
 
 const INIT_POINTER_LOC: usize = 0x4000;
-
-const DEBUG_PRINT: bool = false;
-fn debug_print(str: &String) {
-    if DEBUG_PRINT {
-        println!("{}", str);
-    }
-}
 
 fn check_loop_pointer(command: &Command) -> bool {
     fn check_loop_pointer_rec(command: &Command, rel_pointer: &mut isize) -> bool {
@@ -541,12 +534,6 @@ fn step_uncertain(
             }
         },
         Command::Input { offset, .. } => {
-            add_prev_value(
-                pointer.wrapping_add_signed(*offset),
-                tape,
-                prev_values,
-                true,
-            );
             tape.insert(pointer.wrapping_add_signed(*offset), AbstractCell::Top);
             Ok(())
         }
@@ -594,23 +581,20 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                 &mut cmd_buf,
                 false,
             );
-            let cmd_buf_len = cmd_buf.len();
-            let prev_values_len = prev_values.len();
-            debug_print(&format!("Result {res:?} for command {cmd:?}, prev={prev_pointer}, ptr={pointer}, abs={abstract_pointer}, cmd_buf={cmd_buf_len}, prev_vals={prev_values_len}"));
             match res {
-                Ok(ok_val) => match ok_val {
-                    Some(_) => {
-                        if prev_values.len() > 0 {
-                            for (key, value) in &prev_values {
-                                let new_cmd = Command::SetData {
-                                    offset: (*key as isize) - (abstract_pointer as isize),
-                                    value: *value,
-                                    count: 0,
-                                };
-                                debug_print(&format!("\tAdding {new_cmd:?} from prev_values"));
-                                new_cmds.push(new_cmd);
-                            }
+                Ok(ok_val) => match ok_val { // Can continue partial evaluation
+                    Some(_) => { // Can't consume the current command (i.e. depends on input)
+                        // Add in previous values that must be in memory before current command
+                        for (key, value) in &prev_values {
+                            let new_cmd = Command::SetData { // Move pointer to where it should be
+                                offset: (*key as isize) - (abstract_pointer as isize),
+                                value: *value,
+                                count: 0,
+                            };
+                            new_cmds.push(new_cmd);
                         }
+                        prev_values.clear();
+                        // Move pointer up to where it was before executing the current command
                         let prev_pointer_diff =
                             (prev_pointer as isize) - (abstract_pointer as isize);
                         if prev_pointer_diff > 0 {
@@ -618,85 +602,58 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                                 amount: prev_pointer_diff as usize,
                                 count: 0,
                             };
-                            debug_print(&format!("\tAdding {new_cmd:?} from prev_pointer_diff"));
                             new_cmds.push(new_cmd);
                         } else if prev_pointer_diff < 0 {
                             let new_cmd = Command::DecPointer {
                                 amount: -prev_pointer_diff as usize,
                                 count: 0,
                             };
-                            debug_print(&format!("\tAdding {new_cmd:?} from prev_pointer_diff"));
                             new_cmds.push(new_cmd);
                         }
-                        // abstract_pointer = prev_pointer;
-                        prev_values.clear();
                         cmd_buf.clear();
-                        let new_cmd = cmd.clone();
-                        debug_print(&format!("\tAdding {new_cmd:?} from commands"));
-                        new_cmds.push(new_cmd);
-                        /*
-                        let pointer_diff = (pointer as isize) - (abstract_pointer as isize);
-                        if pointer_diff > 0 {
-                            let new_cmd = Command::IncPointer {
-                                amount: pointer_diff as usize,
-                                count: 0,
-                            };
-                            debug_print(&format!("\tAdding {new_cmd:?} from abs_pointer_diff"));
-                            new_cmds.push(new_cmd);
-                        } else if pointer_diff < 0 {
-                            let new_cmd = Command::DecPointer {
-                                amount: -pointer_diff as usize,
-                                count: 0,
-                            };
-                            debug_print(&format!("\tAdding {new_cmd:?} from abs_pointer_diff"));
-                            new_cmds.push(new_cmd);
-                        }
-                        */
+                        new_cmds.push(cmd.clone());
+                        // Current command may modify pointer, so update abstract pointer
                         abstract_pointer = pointer;
                     }
-                    None => {
-                        if cmd_buf.len() > 0 {
-                            for (key, value) in &prev_values {
-                                let new_cmd = Command::SetData {
-                                    offset: (*key as isize) - (abstract_pointer as isize),
-                                    value: *value,
-                                    count: 0,
-                                };
-                                debug_print(&format!("\tAdding {new_cmd:?} from prev_values"));
-                                new_cmds.push(new_cmd);
-                            }
-                            prev_values.clear();
-                            for buf_cmd in &cmd_buf {
-                                let pointer_diff =
-                                    (buf_cmd.pointer as isize) - (abstract_pointer as isize);
-                                if pointer_diff > 0 {
-                                    let new_cmd = Command::IncPointer {
-                                        amount: pointer_diff as usize,
-                                        count: 0,
-                                    };
-                                    debug_print(&format!("\tAdding {new_cmd:?} from abs_pointer_diff"));
-                                    new_cmds.push(new_cmd);
-                                } else if pointer_diff < 0 {
-                                    let new_cmd = Command::DecPointer {
-                                        amount: -pointer_diff as usize,
-                                        count: 0,
-                                    };
-                                    debug_print(&format!("\tAdding {new_cmd:?} from abs_pointer_diff"));
-                                    new_cmds.push(new_cmd);
-                                }
-                                abstract_pointer = buf_cmd.pointer;
-                                let new_cmd: Command = buf_cmd.command.clone();
-                                debug_print(&format!("\tAdding {new_cmd:?} from cmd_buf"));
-                                new_cmds.push(new_cmd);
-                            }
+                    None => { // Can consume the current command
+                        // Add in previous values that must be in memory before current command
+                        for (key, value) in &prev_values {
+                            let new_cmd = Command::SetData {
+                                offset: (*key as isize) - (abstract_pointer as isize),
+                                value: *value,
+                                count: 0,
+                            };
+                            new_cmds.push(new_cmd);
                         }
                         prev_values.clear();
+                        // Add in related commands that are a result of the current command
+                        for buf_cmd in &cmd_buf {
+                            let pointer_diff =
+                                (buf_cmd.pointer as isize) - (abstract_pointer as isize);
+                            if pointer_diff > 0 {
+                                let new_cmd = Command::IncPointer {
+                                    amount: pointer_diff as usize,
+                                    count: 0,
+                                };
+                                new_cmds.push(new_cmd);
+                            } else if pointer_diff < 0 {
+                                let new_cmd = Command::DecPointer {
+                                    amount: -pointer_diff as usize,
+                                    count: 0,
+                                };
+                                new_cmds.push(new_cmd);
+                            }
+                            abstract_pointer = buf_cmd.pointer;
+                            new_cmds.push(buf_cmd.command.clone());
+                        }
                         cmd_buf.clear();
                     }
                 },
+                // Unable to make any more progress in partial evaluation.
+                // This only occurs when we "lose" the tape pointer.
                 Err(_e) => {
                     error_occurred = true;
-                    //eprintln!("Error in partial evaulation: {e}");
+                    // Dump all previous values and values from the tape
                     for (key, value) in &prev_values {
                         tape.insert(*key, AbstractCell::Value(*value));
                     }
@@ -709,6 +666,7 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                             })
                         }
                     }
+                    // Move the pointer to where it is expected to be
                     let pointer_diff = (prev_pointer as isize) - (abstract_pointer as isize);
                     if pointer_diff > 0 {
                         new_cmds.push(Command::IncPointer {
@@ -725,13 +683,9 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                     new_cmds.push(cmd.clone());
                 }
             }
-        } else {
+        } else { // A previous error occurred. Just copy the commands
             new_cmds.push(cmd.clone());
         }
-    }
-
-    if DEBUG_PRINT {
-        pretty_print(&new_cmds);
     }
 
     return new_cmds;
