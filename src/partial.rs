@@ -21,6 +21,13 @@ struct IOCommand {
 
 const INIT_POINTER_LOC: usize = 0x4000;
 
+const DEBUG_PRINT: bool = false;
+fn debug_print(str: &String) {
+    if DEBUG_PRINT {
+        println!("{}", str);
+    }
+}
+
 fn check_loop_pointer(command: &Command) -> bool {
     fn check_loop_pointer_rec(command: &Command, rel_pointer: &mut isize) -> bool {
         match command {
@@ -188,14 +195,14 @@ fn step(
                 prev_values,
                 inside_loop,
             );
-            match tape
+            let src_tape_val = tape
                 .get(&pointer.wrapping_add_signed(*src_offset))
-                .unwrap_or(&AbstractCell::Value(0))
-            {
-                AbstractCell::Value(src_val) => match tape
-                    .get(&pointer.wrapping_add_signed(*dest_offset))
-                    .unwrap_or(&AbstractCell::Value(0))
-                {
+                .unwrap_or(&AbstractCell::Value(0));
+            let dest_tape_val = tape
+                .get(&pointer.wrapping_add_signed(*dest_offset))
+                .unwrap_or(&AbstractCell::Value(0));
+            match src_tape_val {
+                AbstractCell::Value(src_val) => match dest_tape_val {
                     AbstractCell::Value(dest_val) => {
                         let mut rhs = if *inverted {
                             0u8.wrapping_sub(*src_val) as usize
@@ -209,9 +216,21 @@ fn step(
                         );
                         Ok(None)
                     }
-                    AbstractCell::Top => Ok(Some(())),
+                    AbstractCell::Top => {
+                        tape.insert(
+                            pointer.wrapping_add_signed(*src_offset),
+                            AbstractCell::Top,
+                        );
+                        Ok(Some(()))
+                    },
                 },
-                AbstractCell::Top => Ok(Some(())),
+                AbstractCell::Top => {
+                    tape.insert(
+                        pointer.wrapping_add_signed(*dest_offset),
+                        AbstractCell::Top,
+                    );
+                    Ok(Some(()))
+                },
             }
         }
         Command::SubOffsetData {
@@ -254,9 +273,21 @@ fn step(
                         );
                         Ok(None)
                     }
-                    AbstractCell::Top => Ok(Some(())),
+                    AbstractCell::Top => {
+                        tape.insert(
+                            pointer.wrapping_add_signed(*src_offset),
+                            AbstractCell::Top,
+                        );
+                        Ok(Some(()))
+                    },
                 },
-                AbstractCell::Top => Ok(Some(())),
+                AbstractCell::Top => {
+                    tape.insert(
+                        pointer.wrapping_add_signed(*dest_offset),
+                        AbstractCell::Top,
+                    );
+                    Ok(Some(()))
+                },
             }
         }
         Command::Output { out_type, .. } => match out_type {
@@ -563,76 +594,100 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                 &mut cmd_buf,
                 false,
             );
+            let cmd_buf_len = cmd_buf.len();
+            let prev_values_len = prev_values.len();
+            debug_print(&format!("Result {res:?} for command {cmd:?}, prev={prev_pointer}, ptr={pointer}, abs={abstract_pointer}, cmd_buf={cmd_buf_len}, prev_vals={prev_values_len}"));
             match res {
                 Ok(ok_val) => match ok_val {
                     Some(_) => {
                         if prev_values.len() > 0 {
                             for (key, value) in &prev_values {
-                                new_cmds.push(Command::SetData {
+                                let new_cmd = Command::SetData {
                                     offset: (*key as isize) - (abstract_pointer as isize),
                                     value: *value,
                                     count: 0,
-                                })
+                                };
+                                debug_print(&format!("\tAdding {new_cmd:?} from prev_values"));
+                                new_cmds.push(new_cmd);
                             }
                         }
                         let prev_pointer_diff =
                             (prev_pointer as isize) - (abstract_pointer as isize);
                         if prev_pointer_diff > 0 {
-                            new_cmds.push(Command::IncPointer {
+                            let new_cmd = Command::IncPointer {
                                 amount: prev_pointer_diff as usize,
                                 count: 0,
-                            });
+                            };
+                            debug_print(&format!("\tAdding {new_cmd:?} from prev_pointer_diff"));
+                            new_cmds.push(new_cmd);
                         } else if prev_pointer_diff < 0 {
-                            new_cmds.push(Command::DecPointer {
+                            let new_cmd = Command::DecPointer {
                                 amount: -prev_pointer_diff as usize,
                                 count: 0,
-                            });
+                            };
+                            debug_print(&format!("\tAdding {new_cmd:?} from prev_pointer_diff"));
+                            new_cmds.push(new_cmd);
                         }
+                        // abstract_pointer = prev_pointer;
                         prev_values.clear();
                         cmd_buf.clear();
-                        new_cmds.push(cmd.clone());
+                        let new_cmd = cmd.clone();
+                        debug_print(&format!("\tAdding {new_cmd:?} from commands"));
+                        new_cmds.push(new_cmd);
+                        /*
                         let pointer_diff = (pointer as isize) - (abstract_pointer as isize);
                         if pointer_diff > 0 {
-                            new_cmds.push(Command::IncPointer {
+                            let new_cmd = Command::IncPointer {
                                 amount: pointer_diff as usize,
                                 count: 0,
-                            });
+                            };
+                            debug_print(&format!("\tAdding {new_cmd:?} from abs_pointer_diff"));
+                            new_cmds.push(new_cmd);
                         } else if pointer_diff < 0 {
-                            new_cmds.push(Command::DecPointer {
+                            let new_cmd = Command::DecPointer {
                                 amount: -pointer_diff as usize,
                                 count: 0,
-                            });
+                            };
+                            debug_print(&format!("\tAdding {new_cmd:?} from abs_pointer_diff"));
+                            new_cmds.push(new_cmd);
                         }
+                        */
                         abstract_pointer = pointer;
                     }
                     None => {
                         if cmd_buf.len() > 0 {
-                            if prev_values.len() > 0 {
-                                for (key, value) in &prev_values {
-                                    new_cmds.push(Command::SetData {
-                                        offset: (*key as isize) - (abstract_pointer as isize),
-                                        value: *value,
-                                        count: 0,
-                                    })
-                                }
-                                prev_values.clear();
+                            for (key, value) in &prev_values {
+                                let new_cmd = Command::SetData {
+                                    offset: (*key as isize) - (abstract_pointer as isize),
+                                    value: *value,
+                                    count: 0,
+                                };
+                                debug_print(&format!("\tAdding {new_cmd:?} from prev_values"));
+                                new_cmds.push(new_cmd);
                             }
+                            prev_values.clear();
                             for buf_cmd in &cmd_buf {
                                 let pointer_diff =
                                     (buf_cmd.pointer as isize) - (abstract_pointer as isize);
                                 if pointer_diff > 0 {
-                                    new_cmds.push(Command::IncPointer {
+                                    let new_cmd = Command::IncPointer {
                                         amount: pointer_diff as usize,
                                         count: 0,
-                                    });
+                                    };
+                                    debug_print(&format!("\tAdding {new_cmd:?} from abs_pointer_diff"));
+                                    new_cmds.push(new_cmd);
                                 } else if pointer_diff < 0 {
-                                    new_cmds.push(Command::DecPointer {
+                                    let new_cmd = Command::DecPointer {
                                         amount: -pointer_diff as usize,
                                         count: 0,
-                                    });
+                                    };
+                                    debug_print(&format!("\tAdding {new_cmd:?} from abs_pointer_diff"));
+                                    new_cmds.push(new_cmd);
                                 }
                                 abstract_pointer = buf_cmd.pointer;
-                                new_cmds.push(buf_cmd.command.clone());
+                                let new_cmd: Command = buf_cmd.command.clone();
+                                debug_print(&format!("\tAdding {new_cmd:?} from cmd_buf"));
+                                new_cmds.push(new_cmd);
                             }
                         }
                         prev_values.clear();
@@ -675,7 +730,9 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
         }
     }
 
-    // pretty_print(&new_cmds);
+    if DEBUG_PRINT {
+        pretty_print(&new_cmds);
+    }
 
     return new_cmds;
 }
