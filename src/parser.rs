@@ -6,35 +6,44 @@ pub enum Direction {
 
 #[derive(Debug, Clone)]
 pub enum Command {
+    /// Repr: `>{amount if amount > 1}`
     IncPointer {
         amount: usize,
         count: usize,
     },
+    /// Repr: `<{amount if amount > 1}`
     DecPointer {
         amount: usize,
         count: usize,
     },
+    /// Repr: `+|offset if offset != 0|{amount if amount > 1}`
     IncData {
         offset: isize,
         amount: u8,
         count: usize,
     },
+    /// Repr: `-|offset if offset != 0|{amount if amount > 1}`
     DecData {
         offset: isize,
         amount: u8,
         count: usize,
     },
+    /// Repr: `=|offset if offset != 0|{amount}`
     SetData {
         offset: isize,
         value: u8,
         count: usize,
     },
+    /// Repr: `S>{skip_amount if skip_amount > 1}` if direction is right
+    /// Repr: `S<{skip_amount if skip_amount > 1}` if direction is left
     Scan {
         id: usize,
         direction: Direction,
         skip_amount: usize,
         count: usize,
     },
+    /// Repr: `a+|dest_offset||src_offset|{multiplier}` if inverted
+    /// Repr: `a-|dest_offset||src_offset|{multiplier}` if not inverted
     AddOffsetData {
         dest_offset: isize,
         src_offset: isize,
@@ -42,6 +51,8 @@ pub enum Command {
         inverted: bool,
         count: usize,
     },
+    /// Repr: `s+|dest_offset||src_offset|{multiplier}` if inverted
+    /// Repr: `s-|dest_offset||src_offset|{multiplier}` if not inverted
     SubOffsetData {
         dest_offset: isize,
         src_offset: isize,
@@ -49,14 +60,18 @@ pub enum Command {
         inverted: bool,
         count: usize,
     },
+    /// Repr: `.{value}` if out_type is const
+    /// Repr: `.|offset if offset != 0|` if out_type is const
     Output {
         out_type: OutputType,
         count: usize,
     },
+    /// Repr: `,|offset if offset != 0|`
     Input {
         offset: isize,
         count: usize,
     },
+    /// Repr: `[ body ]`
     Loop {
         id: usize,
         body: Vec<Command>,

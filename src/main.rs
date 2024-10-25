@@ -44,8 +44,8 @@ struct Args {
     optimization_level: u8,
 
     /// Disables partial evaluation when compiling
-    #[arg(long = "no-partial-eval")]
-    disable_partial_eval: bool,
+    #[arg(long = "partial-eval")]
+    partial_eval: bool,
 }
 
 fn main() {
@@ -75,7 +75,7 @@ fn main() {
         return;
     }
 
-    if !args.disable_partial_eval {
+    if args.partial_eval {
         commands = partial::partial_eval(&commands);
     }
 
