@@ -6,35 +6,44 @@ pub enum Direction {
 
 #[derive(Debug, Clone)]
 pub enum Command {
+    /// Repr: `>{amount if amount > 1}`
     IncPointer {
         amount: usize,
         count: usize,
     },
+    /// Repr: `<{amount if amount > 1}`
     DecPointer {
         amount: usize,
         count: usize,
     },
+    /// Repr: `+|offset if offset != 0|{amount if amount > 1}`
     IncData {
         offset: isize,
         amount: u8,
         count: usize,
     },
+    /// Repr: `-|offset if offset != 0|{amount if amount > 1}`
     DecData {
         offset: isize,
         amount: u8,
         count: usize,
     },
+    /// Repr: `=|offset if offset != 0|{amount}`
     SetData {
         offset: isize,
         value: u8,
         count: usize,
     },
+    /// Repr: `S>{skip_amount if skip_amount > 1}` if direction is right
+    /// Repr: `S<{skip_amount if skip_amount > 1}` if direction is left
     Scan {
         id: usize,
         direction: Direction,
         skip_amount: usize,
         count: usize,
     },
+    /// Repr: `a+|dest_offset||src_offset|{multiplier}` if inverted
+    /// Repr: `a-|dest_offset||src_offset|{multiplier}` if not inverted
     AddOffsetData {
         dest_offset: isize,
         src_offset: isize,
@@ -42,6 +51,8 @@ pub enum Command {
         inverted: bool,
         count: usize,
     },
+    /// Repr: `s+|dest_offset||src_offset|{multiplier}` if inverted
+    /// Repr: `s-|dest_offset||src_offset|{multiplier}` if not inverted
     SubOffsetData {
         dest_offset: isize,
         src_offset: isize,
@@ -49,18 +60,30 @@ pub enum Command {
         inverted: bool,
         count: usize,
     },
+    /// Repr: `.{value}` if out_type is const
+    /// Repr: `.|offset if offset != 0|` if out_type is const
     Output {
+        out_type: OutputType,
         count: usize,
     },
+    /// Repr: `,|offset if offset != 0|`
     Input {
+        offset: isize,
         count: usize,
     },
+    /// Repr: `[ body ]`
     Loop {
         id: usize,
         body: Vec<Command>,
         start_count: usize,
         end_count: usize,
     },
+}
+
+#[derive(Debug, Clone)]
+pub enum OutputType {
+    Const(u8),
+    Cell { offset: isize },
 }
 
 pub fn parse(src: &String) -> Vec<Command> {
@@ -88,8 +111,14 @@ pub fn parse(src: &String) -> Vec<Command> {
                 amount: 1,
                 count: 0,
             }),
-            '.' => Some(Command::Output { count: 0 }),
-            ',' => Some(Command::Input { count: 0 }),
+            '.' => Some(Command::Output {
+                out_type: OutputType::Cell { offset: 0 },
+                count: 0,
+            }),
+            ',' => Some(Command::Input {
+                offset: 0,
+                count: 0,
+            }),
             '[' => {
                 stack.push(vec![]);
                 None
@@ -155,7 +184,7 @@ pub fn pretty_print(commands: &[Command]) {
                     if *amount == 1 {
                         print!(">");
                     } else {
-                        print!(">{}", amount);
+                        print!("(>{})", amount);
                     }
                     *newline_end = false;
                 }
@@ -163,7 +192,7 @@ pub fn pretty_print(commands: &[Command]) {
                     if *amount == 1 {
                         print!("<");
                     } else {
-                        print!("<{}", amount);
+                        print!("(<{})", amount);
                     }
                     *newline_end = false;
                 }
@@ -176,7 +205,7 @@ pub fn pretty_print(commands: &[Command]) {
                     if *amount == 1 {
                         print!("{}+", offset_str);
                     } else {
-                        print!("{}+{}", offset_str, amount);
+                        print!("({}+{})", offset_str, amount);
                     }
                     *newline_end = false;
                 }
@@ -189,7 +218,7 @@ pub fn pretty_print(commands: &[Command]) {
                     if *amount == 1 {
                         print!("{}-", offset_str);
                     } else {
-                        print!("{}-{}", offset_str, amount);
+                        print!("({}-{})", offset_str, amount);
                     }
                     *newline_end = false;
                 }
@@ -199,7 +228,7 @@ pub fn pretty_print(commands: &[Command]) {
                     } else {
                         format!("({})", offset)
                     };
-                    print!("{}={}", offset_str, value);
+                    print!("({}={})", offset_str, value);
                     *newline_end = false;
                 }
                 Command::Scan {
@@ -241,8 +270,15 @@ pub fn pretty_print(commands: &[Command]) {
                     print!("({}-={})", dest_offset, dest_string);
                     *newline_end = false;
                 }
-                Command::Output { .. } => {
-                    print!(".");
+                Command::Output { out_type, .. } => {
+                    match out_type {
+                        OutputType::Const(val) => {
+                            print!("(.{val})");
+                        }
+                        OutputType::Cell { offset: _ } => {
+                            print!(".");
+                        }
+                    }
                     *newline_end = false;
                 }
                 Command::Input { .. } => {

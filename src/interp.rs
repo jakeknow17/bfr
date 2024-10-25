@@ -1,7 +1,7 @@
-use crate::parser::{Command, Direction};
+use crate::parser::{Command, Direction, OutputType};
 
 const INIT_TAPE_SIZE: usize = 0x200000;
-const INIT_POINTER_LOC: usize = INIT_TAPE_SIZE / 2;
+const INIT_POINTER_LOC: usize = 0x4000;
 
 pub fn interp(commands: &mut [Command]) {
     fn interp_rec(
@@ -100,22 +100,34 @@ pub fn interp(commands: &mut [Command]) {
                     tape[pointer.wrapping_add_signed(*dest_offset)] =
                         tape[pointer.wrapping_add_signed(*dest_offset)].wrapping_sub(src_val as u8);
                 }
-                Command::Output { ref mut count } => {
+                Command::Output {
+                    out_type,
+                    ref mut count,
+                } => {
                     use std::io::Write;
 
                     *count += 1;
-                    let buf = vec![tape[*pointer]];
+                    let buf: Vec<u8>;
+                    match out_type {
+                        OutputType::Const(val) => buf = vec![*val],
+                        OutputType::Cell { offset } => {
+                            buf = vec![tape[pointer.wrapping_add_signed(*offset)]]
+                        }
+                    }
                     std::io::stdout().write_all(&buf)?;
                 }
-                Command::Input { ref mut count } => {
+                Command::Input {
+                    offset,
+                    ref mut count,
+                } => {
                     use std::io::Read;
 
                     *count += 1;
                     let mut input_buf: [u8; 1] = [0; 1];
                     if let Err(..) = std::io::stdin().read_exact(&mut input_buf) {
-                        tape[*pointer] = 255; // -1
+                        tape[pointer.wrapping_add_signed(*offset)] = 255; // -1
                     } else {
-                        tape[*pointer] = input_buf[0];
+                        tape[pointer.wrapping_add_signed(*offset)] = input_buf[0];
                     }
                 }
                 Command::Loop {

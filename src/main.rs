@@ -2,6 +2,7 @@ mod compiler;
 mod interp;
 mod optimizer;
 mod parser;
+mod partial;
 mod profiler;
 
 use clap::Parser;
@@ -31,8 +32,8 @@ struct Args {
     interp: bool,
 
     /// Output assembly file
-    #[arg(short = 'S', long = "assembly")]
-    output_asm: bool,
+    #[arg(long = "no-binary")]
+    no_binary: bool,
 
     /// Output object file
     #[arg(short = 'c', long = "object")]
@@ -41,6 +42,10 @@ struct Args {
     /// Optimization level (0-3)
     #[arg(short = 'O', default_value_t = 1)]
     optimization_level: u8,
+
+    /// Disables partial evaluation when compiling
+    #[arg(long = "partial-eval")]
+    partial_eval: bool,
 }
 
 fn main() {
@@ -70,11 +75,15 @@ fn main() {
         return;
     }
 
+    if args.partial_eval {
+        commands = partial::partial_eval(&commands);
+    }
+
     compiler::compile(
         &commands,
         &args.file_name,
         &args.out_file,
-        args.output_asm,
+        !args.no_binary,
         args.output_object,
     );
 }
