@@ -62,6 +62,11 @@ fn main() {
 
     let mut commands = parser::parse(&src_contents);
     optimizer::optimize(&mut commands, args.optimization_level);
+
+    if args.partial_eval && !args.interp {
+        commands = partial::partial_eval(&commands);
+    }
+
     if args.pretty_print {
         parser::pretty_print(&commands);
         return;
@@ -75,9 +80,6 @@ fn main() {
         return;
     }
 
-    if args.partial_eval {
-        commands = partial::partial_eval(&commands);
-    }
 
     compiler::compile(
         &commands,

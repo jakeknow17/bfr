@@ -17,7 +17,7 @@ def run_interpreter(test_file, input):
     try:
         result = subprocess.run(
             cmd,
-            input=INPUT,
+            input=input,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=True,  # Raises CalledProcessError on non-zero exit
@@ -37,7 +37,7 @@ def run_compiler(test_file, input):
     Compiles the Brainfuck code and runs the compiled binary with the specified input.
     Returns the compiler's output as bytes.
     """
-    compile_cmd = [COMPILER_PATH, '-o', 'bf', test_file, '-O3']
+    compile_cmd = [COMPILER_PATH, '-o', 'bf', test_file, '-O3', '--partial-eval']
     try:
         # Compile the Brainfuck code
         subprocess.run(
@@ -68,7 +68,7 @@ def run_compiler(test_file, input):
     try:
         run_result = subprocess.run(
             run_cmd,
-            input=INPUT,
+            input=input,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=True,  # Raises CalledProcessError on non-zero exit
