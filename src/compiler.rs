@@ -1,7 +1,7 @@
 use crate::parser::{Command, Direction, OutputType};
 
 const INIT_TAPE_SIZE: usize = 0x200000;
-const INIT_POINTER_LOC: usize = 0x4000;
+const INIT_POINTER_LOC: usize = 0x40000;
 
 fn replace_extension_filepath(filepath: &str, ext: &str) -> String {
     return if let Some(pos) = filepath.rfind('.') {

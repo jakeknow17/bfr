@@ -3,12 +3,11 @@ use crate::parser::{Command, Direction, OutputType};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::targets::{InitializationConfig, Target, TargetMachine};
-use inkwell::types::BasicType;
 use inkwell::values::{FunctionValue, PointerValue};
 use inkwell::{AddressSpace, OptimizationLevel};
 
 const INIT_TAPE_SIZE: usize = 0x200000;
-const INIT_POINTER_LOC: usize = 0x4000;
+const INIT_POINTER_LOC: usize = 0x40000;
 
 fn replace_extension_filepath(filepath: &str, ext: &str) -> String {
     return if let Some(pos) = filepath.rfind('.') {
