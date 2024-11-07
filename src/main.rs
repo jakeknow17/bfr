@@ -86,13 +86,7 @@ fn main() {
     }
 
     if args.use_llvm {
-        llvm::compile(
-            &commands,
-            &args.file_name,
-            &args.out_file,
-            !args.no_binary,
-            args.output_object,
-        );
+        llvm::compile(&commands, &args.file_name);
     } else {
         compiler::compile(
             &commands,
