@@ -7,15 +7,9 @@ pub enum Direction {
 #[derive(Debug, Clone)]
 pub enum Command {
     /// Repr: `>{amount if amount > 1}`
-    IncPointer {
-        amount: usize,
-        count: usize,
-    },
+    IncPointer { amount: usize, count: usize },
     /// Repr: `<{amount if amount > 1}`
-    DecPointer {
-        amount: usize,
-        count: usize,
-    },
+    DecPointer { amount: usize, count: usize },
     /// Repr: `+|offset if offset != 0|{amount if amount > 1}`
     IncData {
         offset: isize,
@@ -62,15 +56,9 @@ pub enum Command {
     },
     /// Repr: `.{value}` if out_type is const
     /// Repr: `.|offset if offset != 0|` if out_type is const
-    Output {
-        out_type: OutputType,
-        count: usize,
-    },
+    Output { out_type: OutputType, count: usize },
     /// Repr: `,|offset if offset != 0|`
-    Input {
-        offset: isize,
-        count: usize,
-    },
+    Input { offset: isize, count: usize },
     /// Repr: `[ body ]`
     Loop {
         id: usize,

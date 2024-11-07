@@ -1,5 +1,6 @@
 mod compiler;
 mod interp;
+mod llvm;
 mod optimizer;
 mod parser;
 mod partial;
@@ -46,6 +47,10 @@ struct Args {
     /// Disables partial evaluation when compiling
     #[arg(long = "partial-eval")]
     partial_eval: bool,
+
+    // Compile with LLVM
+    #[arg(long = "llvm")]
+    use_llvm: bool,
 }
 
 fn main() {
@@ -80,12 +85,21 @@ fn main() {
         return;
     }
 
-
-    compiler::compile(
-        &commands,
-        &args.file_name,
-        &args.out_file,
-        !args.no_binary,
-        args.output_object,
-    );
+    if args.use_llvm {
+        llvm::compile(
+            &commands,
+            &args.file_name,
+            &args.out_file,
+            !args.no_binary,
+            args.output_object,
+        );
+    } else {
+        compiler::compile(
+            &commands,
+            &args.file_name,
+            &args.out_file,
+            !args.no_binary,
+            args.output_object,
+        );
+    }
 }

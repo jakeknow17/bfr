@@ -94,10 +94,7 @@ fn link(object_filepath: &str, dest_file: &str, keep_object: bool) -> Result<(),
 fn clang(asm_file: &str, dest_file: &str, keep_object: bool) -> Result<(), String> {
     let mut clang_cmd = std::process::Command::new("clang");
 
-    clang_cmd
-        .arg("-o")
-        .arg(dest_file)
-        .arg(asm_file);
+    clang_cmd.arg("-o").arg(dest_file).arg(asm_file);
 
     if keep_object {
         clang_cmd.arg("-c");
@@ -108,10 +105,9 @@ fn clang(asm_file: &str, dest_file: &str, keep_object: bool) -> Result<(), Strin
             .to_string()
     })?;
 
-    let clang_status = clang_process.wait().map_err(|_| {
-        "Error: Failed to wait for clang process.".to_string()
-    })?;
-
+    let clang_status = clang_process
+        .wait()
+        .map_err(|_| "Error: Failed to wait for clang process.".to_string())?;
 
     if !clang_status.success() {
         return Err(format!(

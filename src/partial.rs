@@ -210,20 +210,14 @@ fn step(
                         Ok(None)
                     }
                     AbstractCell::Top => {
-                        tape.insert(
-                            pointer.wrapping_add_signed(*src_offset),
-                            AbstractCell::Top,
-                        );
+                        tape.insert(pointer.wrapping_add_signed(*src_offset), AbstractCell::Top);
                         Ok(Some(()))
-                    },
+                    }
                 },
                 AbstractCell::Top => {
-                    tape.insert(
-                        pointer.wrapping_add_signed(*dest_offset),
-                        AbstractCell::Top,
-                    );
+                    tape.insert(pointer.wrapping_add_signed(*dest_offset), AbstractCell::Top);
                     Ok(Some(()))
-                },
+                }
             }
         }
         Command::SubOffsetData {
@@ -267,20 +261,14 @@ fn step(
                         Ok(None)
                     }
                     AbstractCell::Top => {
-                        tape.insert(
-                            pointer.wrapping_add_signed(*src_offset),
-                            AbstractCell::Top,
-                        );
+                        tape.insert(pointer.wrapping_add_signed(*src_offset), AbstractCell::Top);
                         Ok(Some(()))
-                    },
+                    }
                 },
                 AbstractCell::Top => {
-                    tape.insert(
-                        pointer.wrapping_add_signed(*dest_offset),
-                        AbstractCell::Top,
-                    );
+                    tape.insert(pointer.wrapping_add_signed(*dest_offset), AbstractCell::Top);
                     Ok(Some(()))
-                },
+                }
             }
         }
         Command::Output { out_type, .. } => match out_type {
@@ -582,11 +570,14 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                 false,
             );
             match res {
-                Ok(ok_val) => match ok_val { // Can continue partial evaluation
-                    Some(_) => { // Can't consume the current command (i.e. depends on input)
+                Ok(ok_val) => match ok_val {
+                    // Can continue partial evaluation
+                    Some(_) => {
+                        // Can't consume the current command (i.e. depends on input)
                         // Add in previous values that must be in memory before current command
                         for (key, value) in &prev_values {
-                            let new_cmd = Command::SetData { // Move pointer to where it should be
+                            let new_cmd = Command::SetData {
+                                // Move pointer to where it should be
                                 offset: (*key as isize) - (abstract_pointer as isize),
                                 value: *value,
                                 count: 0,
@@ -615,7 +606,8 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                         // Current command may modify pointer, so update abstract pointer
                         abstract_pointer = pointer;
                     }
-                    None => { // Can consume the current command
+                    None => {
+                        // Can consume the current command
                         // Add in previous values that must be in memory before current command
                         for (key, value) in &prev_values {
                             let new_cmd = Command::SetData {
@@ -683,7 +675,8 @@ pub fn partial_eval(cmds: &Vec<Command>) -> Vec<Command> {
                     new_cmds.push(cmd.clone());
                 }
             }
-        } else { // A previous error occurred. Just copy the commands
+        } else {
+            // A previous error occurred. Just copy the commands
             new_cmds.push(cmd.clone());
         }
     }
